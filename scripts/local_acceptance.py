@@ -28,6 +28,8 @@ def validate_workload_bounds(rides: int, workers: int, duration_seconds: int) ->
 
 
 def unique_ride_ids(rides: list[dict]) -> None:
+    if not isinstance(rides, list) or not all(isinstance(ride, dict) for ride in rides):
+        raise ValueError("ride history items must be a list of objects")
     ids = [ride.get("ride_id") for ride in rides]
     if not all(isinstance(i, str) and i for i in ids) or len(ids) != len(set(ids)):
         raise ValueError("ride history must contain unique, non-empty ride_id values")
@@ -107,6 +109,8 @@ def validate_report(report: dict) -> None:
             raise ValueError(f"{key} must be an observed whole count")
     if o["completed_rides"] > w["rides"]:
         raise ValueError("completed rides cannot exceed submitted workload")
+    if o["completed_rides"] == 0:
+        raise ValueError("accepted reports require at least one completed ride")
     if o["duplicate_ride_ids"] != 0:
         raise ValueError("duplicate ride IDs detected")
     if o["backlog_before_restart"] <= o["backlog_after_restart"]:
@@ -122,13 +126,19 @@ def validate_report(report: dict) -> None:
             if json.loads(endpoints[ready_name]["body"]).get("status") != "ok":
                 raise ValueError(f"{ready_name} did not report ready")
         ride_data = json.loads(endpoints["rides"]["body"])
-        unique_ride_ids(ride_data["items"])
+        ride_items = ride_data["items"]
+        unique_ride_ids(ride_items)
+        if not ride_items:
+            raise ValueError("ride history must contain at least one ride")
         fleet_data = json.loads(endpoints["fleet"]["body"])
-        if not isinstance(fleet_data.get("items"), list) or len(fleet_data["items"]) > 100:
+        fleet_items = fleet_data.get("items")
+        if (not isinstance(fleet_items, list) or not fleet_items or len(fleet_items) > 100
+                or not all(isinstance(item, dict) and isinstance(item.get("vehicle_id"), str) and item["vehicle_id"]
+                           for item in fleet_items)):
             raise ValueError("fleet endpoint lacks a bounded items list")
         if len(ride_data["items"]) > 100:
             raise ValueError("ride history exceeds the bounded API page size")
-    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+    except (AttributeError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise ValueError(f"API response evidence is malformed: {exc}") from exc
     for endpoint in ("fleet-metrics", "ride-metrics"):
         body = endpoints[endpoint]["body"]

@@ -26,3 +26,37 @@ jobs:
       - name: Run bounded offline platform checks
         run: python3 -m unittest discover -s tests -v
 
+  terraform-static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_version: 1.8.4
+          terraform_wrapper: false
+      - name: Initialize the pinned provider without backend access
+        run: terraform init -backend=false -input=false
+        working-directory: terraform/lab
+      - name: Lock the supported provider platforms
+        run: terraform providers lock -platform=linux_amd64 -platform=windows_amd64
+        working-directory: terraform/lab
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-provider-lock
+          path: terraform/lab/.terraform.lock.hcl
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+        working-directory: terraform/lab
+      - name: Validate Terraform configuration
+        run: terraform validate
+        working-directory: terraform/lab
+      - name: Run provider-mocked bounds checks
+        run: terraform test -no-color
+        working-directory: terraform/lab

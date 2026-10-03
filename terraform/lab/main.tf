@@ -39,17 +39,30 @@ resource "google_compute_subnetwork" "lab" {
   }
 }
 
-resource "google_service_account" "nodes" {
-  project      = var.project_id
-  account_id   = "${var.cluster_name}-nodes"
-  display_name = "${var.cluster_name} GKE node identity"
-  description  = "Dedicated, least-privilege node identity for the synthetic fleet lab."
+data "google_service_account" "nodes" {
+  project    = var.project_id
+  account_id = var.node_service_account_id
 }
 
-resource "google_project_iam_member" "node_service_account" {
+resource "google_compute_router" "lab" {
   project = var.project_id
-  role    = "roles/container.defaultNodeServiceAccount"
-  member  = "serviceAccount:${google_service_account.nodes.email}"
+  name    = "${var.cluster_name}-router"
+  region  = replace(var.zone, "/-[a-z]$/", "")
+  network = google_compute_network.lab.id
+}
+
+resource "google_compute_router_nat" "lab" {
+  project                            = var.project_id
+  name                               = "${var.cluster_name}-nat"
+  router                             = google_compute_router.lab.name
+  region                             = google_compute_router.lab.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
+
+  subnetwork {
+    name                    = google_compute_subnetwork.lab.id
+    source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
+  }
 }
 
 resource "google_container_cluster" "lab" {
@@ -71,7 +84,7 @@ resource "google_container_cluster" "lab" {
 
   private_cluster_config {
     enable_private_nodes    = true
-    enable_private_endpoint = false
+    enable_private_endpoint = true
     master_ipv4_cidr_block  = "172.16.0.0/28"
 
     master_global_access_config {
@@ -79,15 +92,38 @@ resource "google_container_cluster" "lab" {
     }
   }
 
-  master_authorized_networks_config {
-    gcp_public_cidrs_access_enabled = false
+  # GKE creates this temporary default-pool node before removing the pool.
+  # Keep it at the same reviewed shape and identity as the managed one-node pool.
+  node_config {
+    machine_type    = var.machine_type
+    disk_type       = "pd-standard"
+    disk_size_gb    = var.node_disk_size_gb
+    image_type      = "COS_CONTAINERD"
+    service_account = data.google_service_account.nodes.email
+    oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
+    metadata = {
+      disable-legacy-endpoints = "true"
+    }
 
-    dynamic "cidr_blocks" {
-      for_each = var.authorized_master_cidrs
-      content {
-        cidr_block   = cidr_blocks.value
-        display_name = "reviewed-operator-${cidr_blocks.key + 1}"
-      }
+    shielded_instance_config {
+      enable_secure_boot          = true
+      enable_integrity_monitoring = true
+    }
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+  }
+
+  control_plane_endpoints_config {
+    dns_endpoint_config {
+      allow_external_traffic    = true
+      enable_k8s_tokens_via_dns = false
+      enable_k8s_certs_via_dns  = false
+    }
+
+    ip_endpoints_config {
+      enabled = false
     }
   }
 
@@ -102,6 +138,10 @@ resource "google_container_cluster" "lab" {
   }
 
   lifecycle {
+    # Once removed, the bootstrap pool is replaced by the separately managed
+    # pool; GKE reports that pool's config here. Manage its settings there.
+    ignore_changes = [node_config]
+
     precondition {
       condition     = local.review_inputs_match
       error_message = "Project, zone and node count must exactly match the reviewed inventory and quota ceiling."
@@ -116,11 +156,18 @@ resource "google_container_node_pool" "lab" {
   cluster        = google_container_cluster.lab.name
   node_count     = var.node_count
   node_locations = [var.zone]
-  depends_on     = [google_project_iam_member.node_service_account]
+  depends_on     = [google_compute_router_nat.lab]
 
   management {
     auto_repair  = true
     auto_upgrade = true
+  }
+
+  # A single-node lab accepts an outage during upgrades instead of a surge node.
+  upgrade_settings {
+    max_surge       = 0
+    max_unavailable = 1
+    strategy        = "SURGE"
   }
 
   node_config {
@@ -128,7 +175,7 @@ resource "google_container_node_pool" "lab" {
     disk_type       = "pd-standard"
     disk_size_gb    = var.node_disk_size_gb
     image_type      = "COS_CONTAINERD"
-    service_account = google_service_account.nodes.email
+    service_account = data.google_service_account.nodes.email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]
     tags            = ["${var.cluster_name}-nodes"]
     labels          = local.common_labels
@@ -152,4 +199,92 @@ resource "google_container_node_pool" "lab" {
       error_message = "Node pool count exceeds the reviewed total-node ceiling."
     }
   }
+}
+
+# Cloud SQL private service access allocates a service-producer range and a VPC
+# peering. Keep these resources explicit in the reviewed lab inventory; unlike
+# the ephemeral cluster, the peering can take several days to finish tearing
+# down after deletion and should be treated as retained network foundation.
+resource "google_compute_global_address" "cloudsql_private_service_access" {
+  count         = var.cloudsql_enabled ? 1 : 0
+  project       = var.project_id
+  name          = "${var.cluster_name}-sql-psa"
+  address       = "10.96.0.0"
+  address_type  = "INTERNAL"
+  ip_version    = "IPV4"
+  prefix_length = 24
+  network       = google_compute_network.lab.id
+  purpose       = "VPC_PEERING"
+  description   = "Private service access range retained for disposable Cloud SQL lab instances."
+}
+
+resource "google_service_networking_connection" "cloudsql_private_service_access" {
+  count                   = var.cloudsql_enabled ? 1 : 0
+  network                 = google_compute_network.lab.id
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.cloudsql_private_service_access[0].name]
+}
+
+resource "google_sql_database_instance" "lab" {
+  count               = var.cloudsql_enabled ? 1 : 0
+  project             = var.project_id
+  name                = "${var.cluster_name}-postgres"
+  region              = replace(var.zone, "/-[a-z]$/", "")
+  database_version    = "POSTGRES_17"
+  deletion_protection = false
+  depends_on          = [google_service_networking_connection.cloudsql_private_service_access]
+
+  lifecycle {
+    precondition {
+      condition = (
+        var.cloudsql_plan_reviewed && var.cloudsql_quota_reviewed &&
+        var.cloudsql_pricing_reviewed &&
+        length(trimspace(var.cloudsql_inventory_reference)) >= 3 &&
+        (var.database_password == null ? false : length(var.database_password) >= 32)
+      )
+      error_message = "Cloud SQL requires its exact resource, quota and pricing reviews, a private inventory reference, and a generated strong password."
+    }
+  }
+
+  settings {
+    tier                        = "db-f1-micro"
+    edition                     = "ENTERPRISE"
+    disk_type                   = "PD_SSD"
+    disk_size                   = 10
+    disk_autoresize             = false
+    availability_type           = "ZONAL"
+    deletion_protection_enabled = false
+    user_labels                 = local.common_labels
+
+    location_preference {
+      zone = var.zone
+    }
+
+    backup_configuration {
+      enabled                        = false
+      point_in_time_recovery_enabled = false
+    }
+
+    ip_configuration {
+      ipv4_enabled                                  = false
+      private_network                               = "projects/${var.project_id}/global/networks/${google_compute_network.lab.name}"
+      ssl_mode                                      = "ENCRYPTED_ONLY"
+      enable_private_path_for_google_cloud_services = false
+    }
+  }
+}
+
+resource "google_sql_database" "lab" {
+  count    = var.cloudsql_enabled ? 1 : 0
+  project  = var.project_id
+  instance = google_sql_database_instance.lab[0].name
+  name     = "fleet"
+}
+
+resource "google_sql_user" "lab" {
+  count    = var.cloudsql_enabled ? 1 : 0
+  project  = var.project_id
+  instance = google_sql_database_instance.lab[0].name
+  name     = "fleet"
+  password = var.database_password
 }

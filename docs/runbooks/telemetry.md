@@ -49,3 +49,26 @@ Compose configures steady-service CPU and memory ceilings that total 3 CPU and 2
 Loki retention is 48 hours; Tempo and Mimir retention is 24 hours. The Alloy trace queue and remote-write queue are bounded, as are app file logs and the OTLP trace batch queue. Retention removes old backend data asynchronously; filesystem volumes have no portable Compose hard-size cap. Therefore this configuration does not guarantee a maximum disk footprint. Check free disk before long scenarios and remove retained telemetry volumes deliberately when resetting the experiment.
 
 No Docker registry pull, stack startup, data ingestion, dashboard query, end-to-end trace, CPU/memory measurement, cluster deploy, cloud resource, or production readiness is claimed here. Run `docker compose config` before starting; a live data-flow check is still required when the pinned images are available locally or the registry is reachable.
+
+## Bounded single-node GKE stack
+
+`observability/kubernetes/` contains the same pinned single-process backends and dashboard for the disposable GKE lab. It requests 400m CPU and 1,056 MiB memory across five pods (Grafana, Loki, Tempo, Mimir, Alloy); limits are 1,300m CPU and 1,408 MiB memory. These are scheduling budgets, not measured capacity. Each backend has one replica, filesystem data lives in capped `emptyDir` volumes, and restarts or teardown discard telemetry history. It is intended for one low-volume synthetic workload, with no persistence or availability guarantee.
+
+Before applying, ensure the `fleet-app` namespace and app services exist and create the Kubernetes Secret `observability/grafana-admin` with key `password` through the approved secret path. Do not put the Grafana password in Git. The v0.1.0 application chart has no telemetry environment-value input. The first manual lab uses a reviewed environment patch setting `OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy.observability.svc.cluster.local:4318` on Fleet API, Ride API and assignment worker. Argo's exception is restricted to that one named environment entry in the exact three deployment/container pairs, with `RespectIgnoreDifferences=true`; do not ignore all environment entries or entire workload specifications. This temporary configuration is not an automated release path. Add a reviewed chart input before claiming repeatable CI deployment. Apply the stack and then bind Alloy's read-only pod log access in the app namespace:
+
+```powershell
+kubectl apply -k observability/kubernetes
+kubectl apply -f observability/kubernetes/alloy-rbac.yaml
+```
+
+The gateway serves Grafana at `/grafana/` and preserves that prefix to `grafana.observability.svc.cluster.local:3000`. After its public IP is known, replace the placeholder in Grafana's external URL and let its deployment restart:
+
+```powershell
+kubectl -n observability set env deployment/grafana "GF_SERVER_ROOT_URL=https://${GATEWAY_IP}/grafana/"
+```
+
+Alloy scrapes the three existing `/metrics` endpoints every 15 seconds, reads application JSON stdout through Kubernetes' pod log API, and sends logs to Loki. The app's existing OTLP/HTTP trace exporter targets Alloy; Alloy forwards traces to Tempo. Grafana's provisioned Mimir, Loki and Tempo sources feed the bundled pending-jobs, completed-jobs and recent-logs dashboard, with the existing trace/log links. The Alloy role in `alloy-rbac.yaml` grants `get`, `list` and `watch` only for pods and pod logs in `fleet-app`.
+
+This overlay shares the small node with Argo CD, GKE system pods, the gateway and the app. Confirm the rendered requests against current node allocatable capacity before apply. It does not claim live ingestion, successful UI access, or measured runtime fit until those are checked in the lab.
+
+Grafana keeps its image-bundled data-source plugins by setting `GF_PLUGINS_PREINSTALL_AUTO_UPDATE=false`. The first live run reproduced the background updater unloading those plugins and then failing to replace files on the read-only root filesystem; queries failed even while Grafana's health endpoint was ready. This setting preserves the read-only filesystem and makes plugin upgrades part of the reviewed image change. See the [upstream failure report](https://github.com/grafana/grafana/issues/132528) and [version-pinned configuration defaults](https://github.com/grafana/grafana/blob/v13.2.2/conf/defaults.ini).

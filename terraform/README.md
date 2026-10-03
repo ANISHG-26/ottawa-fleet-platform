@@ -1,28 +1,78 @@
-# Terraform preparation
+# Terraform lab
 
-`lab/` is a preparatory Terraform root for one zonal GKE Standard lab. It owns a dedicated VPC/subnet, one bounded CPU node pool and its node identity. It contains no application or Argo resources. The GKE nodes have private addresses, and the control-plane public endpoint accepts only explicit reviewed CIDRs. Cloud NAT is omitted, so node workloads do not have general outbound internet access and cannot pull from GHCR or another external registry. A future release plan must choose a reviewed image path reachable through Private Google Access (for example, Artifact Registry) or separately review any bounded NAT requirement before deployment.
+`lab/` is the Terraform root for the optional, zonal GKE Standard lab. It owns
+one private VPC and subnet, subnet-scoped Cloud NAT for GitHub/GHCR traffic,
+one `e2-standard-2` node with a 30 GiB `pd-standard` disk, and a DNS-only GKE
+control-plane endpoint gated by IAM. Nodes have no external IP addresses.
+Cloud NAT is required because Argo CD fetches the app chart from GitHub and
+the public, immutable app images from GHCR. Terraform does not create a public
+load balancer; the separately applied `bootstrap/gcp/gateway` Kubernetes Service
+creates the shared review UI load balancer and must be deleted before cluster
+teardown. Its charge is included in the lab sizing and cost document.
 
-This code does not establish that cloud provisioning is feasible or authorized. Issue #15 remains open and blocked until the separate feasibility and workload-measurement issues have evidence, and the actual resources have approved apply, teardown and residual-inventory evidence.
+The first run uses an explicitly reviewed sizing hypothesis; it is not backed
+by an accepted local measurement. Collect resource and workload observations
+during the cloud run and compare them with that hypothesis. The single node is
+not highly available: maintenance and node upgrades can interrupt workloads.
+The cluster uses a node service account created and granted
+`roles/container.defaultNodeServiceAccount` separately. Terraform reads that
+identity but does not edit project IAM, so later expiry cleanup does not need
+`setIamPolicy`.
 
-## Required private review inputs
+## Private inputs and reviewed plan
 
-There is no default project, zone, cluster name, machine size, node count, disk size or operator CIDR. The caller must supply the project/zone from the reviewed inventory and confirm them again in the review inputs. The default-false gate inputs require confirmation of the inventory, current API/quota checks, pricing, measured local workload, explicit resource shape, total node ceiling and teardown owner/deadline. The node ceiling and each node count are capped at two; machine types are limited to two-vCPU CPU types; disks are capped at 100 GiB. GKE requires a one-node bootstrap pool on cluster creation before Terraform removes it and creates the separately managed pool, so inventory and quota review must account for that transient node. These bounds do not claim that a size fits a quota or budget.
+Keep the versioned GCS state bucket, backend config, variable file, plan file,
+and any account-specific evidence private and outside Git. Use a unique state
+prefix and cluster name for each disposable run. The variable file includes
+the concrete inventory, API/quota/pricing confirmation, teardown owner and
+deadline, exact node shape, and the reviewed initial sizing hypothesis. No
+project, zone, billing data, credentials, or account notes have defaults in
+source control. APIs are enabled separately before Terraform runs.
 
-Keep the variable file and review references private and outside Git. Do not put credentials, personal account notes or cost evidence in source control. Required APIs must already be enabled through a separately reviewed process: this configuration intentionally does not create `google_project_service` resources or change billing/API enablement.
-
-## State and credentials
-
-The root selects the GCS backend, but does not create a bucket or commit its name. Before initialization, choose and review an existing private bucket, its IAM access, object versioning and a unique prefix. Put `bucket` and `prefix` in a private backend config file outside the checkout, then initialize with that file. Keep credentials external; the Google provider uses the operator's separately configured Application Default Credentials.
+From PowerShell, initialize using the private backend config, then save and
+review the exact plan before applying it:
 
 ```powershell
-terraform -chdir=terraform/lab init -backend=false
+terraform -chdir=terraform/lab init -input=false -backend-config="<PRIVATE_BACKEND_CONFIG>"
+terraform -chdir=terraform/lab plan -input=false -var-file="<PRIVATE_TFVARS>" -out="<PRIVATE_PLAN_FILE>"
+terraform -chdir=terraform/lab show -no-color "<PRIVATE_PLAN_FILE>"
+terraform -chdir=terraform/lab apply -input=false "<PRIVATE_PLAN_FILE>"
+```
+
+The private inputs must include `node_service_account_id`, which identifies
+the separately managed node identity. Terraform requires the project, zone,
+node count, node ceiling, machine and disk shape to match the reviewed
+inventory. The actual reviewed plan remains the apply approval boundary.
+
+The root is pinned to Google provider 7.29.0. Credential-free validation and
+mock tests can be run with:
+
+```powershell
 terraform -chdir=terraform/lab fmt -check -recursive
 terraform -chdir=terraform/lab validate
 terraform -chdir=terraform/lab test
 ```
 
-These are source and mock-provider checks only; initialization downloads the pinned provider but uses no GCP credentials. The final Terraform test uses a mocked provider apply to resolve computed resource IDs; it makes no Google API calls and creates no cloud resources. For a later reviewed run, initialize the GCS backend with its private config file instead of `-backend=false`. This task does not run a cloud plan, apply, destroy, or `gcloud` command. A later plan requires freshly reviewed project/API/quota/pricing evidence, matching inventory and explicit teardown ownership; review the exact resulting plan separately before any apply. Terraform state and plan files can contain sensitive infrastructure metadata.
+## Bootstrap and smoke check
 
-The Google provider is constrained to `hashicorp/google` 7.29.0. The committed `.terraform.lock.hcl` was generated by credential-free hosted CI using Terraform Registry authentication and includes Linux and Windows AMD64 package hashes. Local registry discovery remained unavailable; hosted validation and mock tests provide the provider checks. Provider and GKE schema details should be rechecked when changing the pin.
+After apply, use a dedicated kubeconfig file outside the checkout. The helper
+fetches only the pinned Argo CD v3.5.3 manifest, rejects redirects, caps it at
+2 MiB and verifies SHA-256 `7efe2d6bbc03f63623640f1e4198f16c84009d510fb810ef71e56df1b7614ba9`
+before applying it. It verifies the exact DNS-endpoint context before any
+Kubernetes changes, sets explicit resource requests and limits, disables
+unused Dex, notifications and ApplicationSet controllers, waits for the
+remaining Argo components and Ready node, and applies the `AppProject`.
 
-Configuration references the official [Google provider 7.29.0 schema](https://registry.terraform.io/providers/hashicorp/google/7.29.0/docs) (provider license: [MPL-2.0](https://github.com/hashicorp/terraform-provider-google/blob/main/LICENSE)) and Google's [GKE hardening guidance](https://docs.cloud.google.com/kubernetes-engine/docs/how-to/hardening-your-cluster). No upstream source code is copied or redistributed.
+```powershell
+python -m scripts.gcp_lab bootstrap --project <PRIVATE_PROJECT_ID> --zone <REVIEWED_ZONE> --cluster <EXACT_CLUSTER_NAME> --kubeconfig <PRIVATE_KUBECONFIG>
+kubectl --kubeconfig <PRIVATE_KUBECONFIG> --context gke_<PROJECT>_<ZONE>_<CLUSTER> get nodes
+kubectl --kubeconfig <PRIVATE_KUBECONFIG> --context gke_<PROJECT>_<ZONE>_<CLUSTER> -n argocd get deployments,statefulsets
+```
+
+The helper does not create cloud resources. Do not run a second Terraform root
+or a broad `gcloud` cleanup command. After validation, destroy only the saved
+plan's exact state with the reviewed private inputs, then inspect the exact
+cluster, NAT/router, VPC/subnet, nodes, disks and external addresses for
+residual resources. The later timed GitHub Actions path will use the same lab
+root and an external durable expiry controller; the manual first run does not
+claim automated two-hour cleanup.

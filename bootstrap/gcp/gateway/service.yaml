@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fleet-gateway
+  namespace: fleet-gateway
+  labels:
+    app.kubernetes.io/name: fleet-gateway
+    app.kubernetes.io/part-of: ottawa-fleet
+  annotations:
+    cloud.google.com/l4-rbs: "enabled"
+spec:
+  type: LoadBalancer
+  # Use an ephemeral address retained for the lifetime of this Service.
+  loadBalancerSourceRanges:
+    # Inert default: replace through a private overlay with the reviewer's IPv4 /32.
+    - 0.0.0.0/32
+  selector:
+    app.kubernetes.io/name: fleet-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 8443
+      protocol: TCP

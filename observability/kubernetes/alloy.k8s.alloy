@@ -1,0 +1,116 @@
+otelcol.receiver.otlp "app" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces = [otelcol.processor.batch.app.input]
+  }
+}
+
+otelcol.processor.batch "app" {
+  timeout = "1s"
+  send_batch_size = 256
+  send_batch_max_size = 512
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo.observability.svc.cluster.local:4317"
+    tls {
+      insecure = true
+    }
+  }
+  sending_queue {
+    enabled = true
+    num_consumers = 2
+    queue_size = 512
+  }
+  retry_on_failure {
+    enabled = true
+    max_elapsed_time = "10s"
+  }
+}
+
+prometheus.scrape "ottawa_fleet" {
+  scrape_interval = "15s"
+  scrape_timeout = "5s"
+  targets = [
+    {__address__ = "fleet-api.fleet-app.svc.cluster.local:8080", job = "ottawa-fleet", service = "fleet-api"},
+    {__address__ = "ride-api.fleet-app.svc.cluster.local:8081", job = "ottawa-fleet", service = "ride-api"},
+    {__address__ = "assignment-worker.fleet-app.svc.cluster.local:8082", job = "ottawa-fleet", service = "assignment-worker"},
+  ]
+  forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "http://mimir.observability.svc.cluster.local:9009/api/v1/push"
+    headers = {"X-Scope-OrgID" = "anonymous"}
+    remote_timeout = "5s"
+    queue_config {
+      capacity = 2000
+      max_shards = 2
+      max_samples_per_send = 500
+      batch_send_deadline = "5s"
+    }
+  }
+}
+
+discovery.kubernetes "app_pods" {
+  role = "pod"
+  namespaces {
+    names = ["fleet-app"]
+  }
+}
+
+discovery.relabel "app_logs" {
+  targets = discovery.kubernetes.app_pods.targets
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    action = "keep"
+    regex = "fleet-app"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_component"]
+    action = "keep"
+    regex = "fleet-api|ride-api|assignment-worker"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_component"]
+    target_label = "service"
+  }
+  rule {
+    target_label = "job"
+    replacement = "ottawa-fleet"
+  }
+}
+
+loki.source.kubernetes "app_logs" {
+  targets = discovery.relabel.app_logs.output
+  forward_to = [loki.process.app_logs.receiver]
+}
+
+loki.process "app_logs" {
+  stage.json {
+    expressions = {
+      level = "level",
+    }
+  }
+  stage.labels {
+    values = {
+      level = "",
+      service = "",
+      job = "",
+    }
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki.observability.svc.cluster.local:3100/loki/api/v1/push"
+  }
+}

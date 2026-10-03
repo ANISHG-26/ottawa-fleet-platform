@@ -10,7 +10,32 @@ output "cluster_location" {
 
 output "node_service_account_email" {
   description = "Dedicated node identity. Workloads require separate identities and grants."
-  value       = google_service_account.nodes.email
+  value       = data.google_service_account.nodes.email
+}
+
+output "cloudsql_enabled" {
+  description = "Whether the disposable private PostgreSQL instance was enabled for this exact lab run."
+  value       = var.cloudsql_enabled
+}
+
+output "cloudsql_instance_name" {
+  description = "Private PostgreSQL instance name, or null when Cloud SQL is disabled."
+  value       = try(google_sql_database_instance.lab[0].name, null)
+}
+
+output "cloudsql_private_ip" {
+  description = "Private-only Cloud SQL address for the in-VPC app connection, or null when disabled."
+  value       = try(google_sql_database_instance.lab[0].private_ip_address, null)
+}
+
+output "cloudsql_database_name" {
+  description = "Disposable PostgreSQL database name, or null when Cloud SQL is disabled."
+  value       = try(google_sql_database.lab[0].name, null)
+}
+
+output "cloudsql_user_name" {
+  description = "Disposable PostgreSQL application user, or null when Cloud SQL is disabled."
+  value       = try(google_sql_user.lab[0].name, null)
 }
 
 output "resource_summary" {

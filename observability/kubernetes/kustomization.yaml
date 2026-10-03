@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: observability
+
+resources:
+  - namespace.yaml
+  - backends.yaml
+  - grafana.yaml
+  - alloy.yaml
+
+configMapGenerator:
+  - name: loki-config
+    files:
+      - config.yaml=loki.yaml
+  - name: tempo-config
+    files:
+      - config.yaml=tempo.yaml
+  - name: mimir-config
+    files:
+      - config.yaml=mimir.yaml
+  - name: grafana-provisioning
+    files:
+      - datasources.yaml=grafana-datasources.yaml
+      - dashboards.yaml=grafana-dashboards.yaml
+  - name: grafana-dashboard
+    files:
+      - ottawa-fleet.json=ottawa-fleet.json
+  - name: alloy-config
+    files:
+      - config.alloy=alloy.k8s.alloy

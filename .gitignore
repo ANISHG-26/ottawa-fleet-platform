@@ -9,11 +9,15 @@
 .private/
 private/
 private-planning/
+bootstrap/argo-install-v*.yaml
+bootstrap/gcp/argo/argo-install-v*.yaml
 .gcloud/
 .kube/
 terraform.tfstate*
 *.tfvars
+*.tfvars.json
 !*.tfvars.example
+backend.hcl
 .terraform/
 # Generated assets
 node_modules/

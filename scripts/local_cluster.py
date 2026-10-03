@@ -15,6 +15,7 @@ MIN_DOCKER_CPUS = 6
 MIN_DOCKER_MEMORY_GIB = 8
 KIND_NODE_IMAGE = "kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0"
 ARGO_VERSION = "v3.5.3"
+MAX_ARGO_MANIFEST_BYTES = 2 * 1024 * 1024
 
 
 def can_create_cluster(memory_gib: float, cpus: int) -> bool:
@@ -88,9 +89,9 @@ def main(argv=None) -> int:
         with response:
             if response.geturl() != url or len(response.geturl()) > 2048:
                 parser.error("manifest URL redirected; download rejected")
-            data = response.read(8 * 1024 * 1024 + 1)
-        if len(data) > 8 * 1024 * 1024:
-            parser.error("manifest exceeded 8 MiB cap")
+            data = response.read(MAX_ARGO_MANIFEST_BYTES + 1)
+        if len(data) > MAX_ARGO_MANIFEST_BYTES:
+            parser.error("manifest exceeded 2 MiB cap")
         actual = hashlib.sha256(data).hexdigest()
         if actual != args.sha256:
             parser.error(f"manifest checksum mismatch: expected {args.sha256}, observed {actual}")

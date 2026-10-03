@@ -35,32 +35,24 @@ variable "cluster_name" {
   }
 }
 
-variable "authorized_master_cidrs" {
-  description = "Reviewed operator CIDR ranges allowed to reach the public GKE control-plane endpoint. Use narrow, stable ranges."
-  type        = list(string)
+variable "node_service_account_id" {
+  description = "ID of the separately managed node service account, already granted roles/container.defaultNodeServiceAccount."
+  type        = string
+  sensitive   = true
 
   validation {
-    condition = (
-      length(var.authorized_master_cidrs) > 0 &&
-      length(var.authorized_master_cidrs) <= 5 &&
-      alltrue([
-        for cidr in var.authorized_master_cidrs : try(
-          cidrnetmask(cidr) != "" && tonumber(split("/", cidr)[1]) >= 16,
-          false
-        )
-      ])
-    )
-    error_message = "Provide 1 to 5 valid IPv4 control-plane CIDRs, each /16 or narrower; 0.0.0.0/0 is forbidden."
+    condition     = can(regex("^[a-z][a-z0-9-]{4,28}[a-z0-9]$", var.node_service_account_id))
+    error_message = "node_service_account_id must identify the pre-created lab node service account."
   }
 }
 
 variable "machine_type" {
-  description = "Reviewed CPU-only machine type. The allowlist caps node size at two vCPUs."
+  description = "Fixed first-lab CPU-only machine type; this hypothesis will be compared with observed cloud resource use."
   type        = string
 
   validation {
-    condition     = contains(["e2-medium", "e2-standard-2"], var.machine_type)
-    error_message = "machine_type must be e2-medium or e2-standard-2."
+    condition     = var.machine_type == "e2-standard-2"
+    error_message = "The initial GCP lab uses one e2-standard-2 node."
   }
 }
 
@@ -69,8 +61,8 @@ variable "node_count" {
   type        = number
 
   validation {
-    condition     = var.node_count >= 1 && var.node_count <= 2 && floor(var.node_count) == var.node_count
-    error_message = "node_count must be an integer from 1 through 2."
+    condition     = var.node_count == 1
+    error_message = "The initial GCP lab uses exactly one node."
   }
 }
 
@@ -79,8 +71,8 @@ variable "node_disk_size_gb" {
   type        = number
 
   validation {
-    condition     = var.node_disk_size_gb >= 30 && var.node_disk_size_gb <= 100 && floor(var.node_disk_size_gb) == var.node_disk_size_gb
-    error_message = "node_disk_size_gb must be an integer from 30 through 100."
+    condition     = var.node_disk_size_gb == 30
+    error_message = "The initial GCP lab uses a 30 GiB node boot disk."
   }
 }
 
@@ -139,14 +131,25 @@ variable "pricing_reviewed" {
   }
 }
 
-variable "workload_measurement_reference" {
-  description = "Private reference to the accepted local workload/resource measurement for this lab size."
+variable "workload_sizing_reference" {
+  description = "Private reference to the reviewed initial unmeasured resource sizing hypothesis; the first cloud run will collect the baseline."
   type        = string
   sensitive   = true
 
   validation {
-    condition     = length(trimspace(var.workload_measurement_reference)) >= 3 && !contains(["todo", "pending", "placeholder"], lower(trimspace(var.workload_measurement_reference)))
-    error_message = "workload_measurement_reference must identify accepted local workload and resource measurements."
+    condition     = length(trimspace(var.workload_sizing_reference)) >= 3 && !contains(["todo", "pending", "placeholder"], lower(trimspace(var.workload_sizing_reference)))
+    error_message = "workload_sizing_reference must identify the reviewed unmeasured sizing hypothesis."
+  }
+}
+
+variable "workload_sizing_reviewed" {
+  description = "Must be true only after a human reviewed the initial unmeasured resource sizing hypothesis for this first cloud run."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = var.workload_sizing_reviewed
+    error_message = "Planning is gated until the initial unmeasured workload sizing hypothesis has been reviewed."
   }
 }
 
@@ -172,7 +175,7 @@ variable "teardown_owner_reference" {
 }
 
 variable "inventory_matches_review" {
-  description = "Explicit confirmation that count, machine type, disk size, CIDRs and names match the reviewed inventory."
+  description = "Explicit confirmation that count, machine type, disk size and names match the reviewed inventory."
   type        = bool
   default     = false
 
@@ -183,12 +186,12 @@ variable "inventory_matches_review" {
 }
 
 variable "reviewed_resource_ceiling" {
-  description = "Maximum total nodes allowed by the reviewed quota/pricing ceiling. Must equal or exceed node_count and remain at most two."
+  description = "Maximum total nodes allowed by the reviewed quota/pricing ceiling for this first run."
   type        = number
 
   validation {
-    condition     = var.reviewed_resource_ceiling >= 1 && var.reviewed_resource_ceiling <= 2 && floor(var.reviewed_resource_ceiling) == var.reviewed_resource_ceiling
-    error_message = "reviewed_resource_ceiling must be an integer from 1 through 2."
+    condition     = var.reviewed_resource_ceiling == 1
+    error_message = "The initial GCP lab node ceiling is one."
   }
 }
 
@@ -211,5 +214,49 @@ variable "project_zone_match_reviewed" {
   validation {
     condition     = var.project_zone_match_reviewed
     error_message = "Planning is gated until project and zone match the reviewed inventory."
+  }
+}
+
+variable "cloudsql_enabled" {
+  description = "Creates the optional privately connected PostgreSQL instance only when its separate reviewed database plan is enabled."
+  type        = bool
+  default     = false
+}
+
+variable "cloudsql_plan_reviewed" {
+  description = "Must be true after reviewing the exact Cloud SQL tier, storage, private connectivity and deletion impact."
+  type        = bool
+  default     = false
+}
+
+variable "cloudsql_quota_reviewed" {
+  description = "Must be true after checking the current Cloud SQL and private service access quotas for the selected project and region."
+  type        = bool
+  default     = false
+}
+
+variable "cloudsql_pricing_reviewed" {
+  description = "Must be true after reviewing the current cost estimate for the exact disposable Cloud SQL resources."
+  type        = bool
+  default     = false
+}
+
+variable "cloudsql_inventory_reference" {
+  description = "Private reference to the Cloud SQL inventory, including its retained private-service-access network dependency."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "database_password" {
+  description = "Generated high-entropy password for the disposable PostgreSQL user; keep the tfvars and Terraform state private."
+  type        = string
+  sensitive   = true
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.database_password == null ? true : length(var.database_password) >= 32
+    error_message = "A supplied Cloud SQL password must contain at least 32 characters."
   }
 }

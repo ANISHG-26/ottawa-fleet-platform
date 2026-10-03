@@ -10,9 +10,19 @@ locals {
     var.review_zone == var.zone &&
     var.node_count <= var.reviewed_resource_ceiling
   )
+
+  network_id   = var.retained_network_name == null ? google_compute_network.lab[0].id : data.google_compute_network.retained[0].id
+  network_name = var.retained_network_name == null ? google_compute_network.lab[0].name : data.google_compute_network.retained[0].name
+}
+
+data "google_compute_network" "retained" {
+  count   = var.retained_network_name == null ? 0 : 1
+  project = var.project_id
+  name    = var.retained_network_name
 }
 
 resource "google_compute_network" "lab" {
+  count                   = var.retained_network_name == null ? 1 : 0
   project                 = var.project_id
   name                    = "${var.cluster_name}-vpc"
   auto_create_subnetworks = false
@@ -20,11 +30,18 @@ resource "google_compute_network" "lab" {
   description             = "Dedicated VPC for the bounded synthetic fleet lab."
 }
 
+# Preserve addresses for existing manual lab state when making the VPC
+# conditional. Retained-network CI state is fresh and owns no foundation.
+moved {
+  from = google_compute_network.lab
+  to   = google_compute_network.lab[0]
+}
+
 resource "google_compute_subnetwork" "lab" {
   project                  = var.project_id
   name                     = "${var.cluster_name}-subnet"
   region                   = replace(var.zone, "/-[a-z]$/", "")
-  network                  = google_compute_network.lab.id
+  network                  = local.network_id
   ip_cidr_range            = "10.40.0.0/20"
   private_ip_google_access = true
 
@@ -48,7 +65,7 @@ resource "google_compute_router" "lab" {
   project = var.project_id
   name    = "${var.cluster_name}-router"
   region  = replace(var.zone, "/-[a-z]$/", "")
-  network = google_compute_network.lab.id
+  network = local.network_id
 }
 
 resource "google_compute_router_nat" "lab" {
@@ -69,7 +86,7 @@ resource "google_container_cluster" "lab" {
   project                  = var.project_id
   name                     = var.cluster_name
   location                 = var.zone
-  network                  = google_compute_network.lab.id
+  network                  = local.network_id
   subnetwork               = google_compute_subnetwork.lab.id
   networking_mode          = "VPC_NATIVE"
   remove_default_node_pool = true
@@ -201,26 +218,25 @@ resource "google_container_node_pool" "lab" {
   }
 }
 
-# Cloud SQL private service access allocates a service-producer range and a VPC
-# peering. Keep these resources explicit in the reviewed lab inventory; unlike
-# the ephemeral cluster, the peering can take several days to finish tearing
-# down after deletion and should be treated as retained network foundation.
+# In manual mode, this root preserves the existing optional PSA ownership
+# shape. CI mode leaves the slow-to-delete peering and its allocated range in
+# the separate foundation state because network deletion can take several days.
 resource "google_compute_global_address" "cloudsql_private_service_access" {
-  count         = var.cloudsql_enabled ? 1 : 0
+  count         = var.cloudsql_enabled && var.retained_network_name == null ? 1 : 0
   project       = var.project_id
   name          = "${var.cluster_name}-sql-psa"
   address       = "10.96.0.0"
   address_type  = "INTERNAL"
   ip_version    = "IPV4"
   prefix_length = 24
-  network       = google_compute_network.lab.id
+  network       = local.network_id
   purpose       = "VPC_PEERING"
   description   = "Private service access range retained for disposable Cloud SQL lab instances."
 }
 
 resource "google_service_networking_connection" "cloudsql_private_service_access" {
-  count                   = var.cloudsql_enabled ? 1 : 0
-  network                 = google_compute_network.lab.id
+  count                   = var.cloudsql_enabled && var.retained_network_name == null ? 1 : 0
+  network                 = local.network_id
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.cloudsql_private_service_access[0].name]
 }
@@ -267,7 +283,7 @@ resource "google_sql_database_instance" "lab" {
 
     ip_configuration {
       ipv4_enabled                                  = false
-      private_network                               = "projects/${var.project_id}/global/networks/${google_compute_network.lab.name}"
+      private_network                               = "projects/${var.project_id}/global/networks/${local.network_name}"
       ssl_mode                                      = "ENCRYPTED_ONLY"
       enable_private_path_for_google_cloud_services = false
     }

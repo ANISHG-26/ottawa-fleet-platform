@@ -83,6 +83,10 @@ class LabCleanupContractTests(unittest.TestCase):
             "workload_sizing_reviewed": True, "teardown_owner_reference": "private:owner",
             "inventory_matches_review": True, "reviewed_resource_ceiling": 1,
             "ceiling_matches_review": True, "project_zone_match_reviewed": True,
+            "retained_network_name": "fleet-lab-ci-network",
+            "cloudsql_enabled": True, "cloudsql_plan_reviewed": True,
+            "cloudsql_quota_reviewed": True, "cloudsql_pricing_reviewed": True,
+            "cloudsql_inventory_reference": "private:sql-inventory",
         }
         checkout = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(dir=checkout) as folder:
@@ -108,6 +112,10 @@ class LabCleanupContractTests(unittest.TestCase):
             "workload_sizing_reviewed": True, "teardown_owner_reference": "private:owner",
             "inventory_matches_review": True, "reviewed_resource_ceiling": 1,
             "ceiling_matches_review": True, "project_zone_match_reviewed": True,
+            "retained_network_name": "fleet-lab-ci-network",
+            "cloudsql_enabled": True, "cloudsql_plan_reviewed": True,
+            "cloudsql_quota_reviewed": True, "cloudsql_pricing_reviewed": True,
+            "cloudsql_inventory_reference": "private:sql-inventory",
         }
         with tempfile.TemporaryDirectory() as folder:
             outputs = write_run_inputs(
@@ -120,6 +128,8 @@ class LabCleanupContractTests(unittest.TestCase):
             backend = Path(outputs["backend"]).read_text(encoding="utf-8")
             self.assertEqual(values["cluster_name"], "fleet-lab-r37131621545")
             self.assertEqual(values["teardown_deadline"], expires.isoformat().replace("+00:00", "Z"))
+            self.assertEqual(values["retained_network_name"], "fleet-lab-ci-network")
+            self.assertGreaterEqual(len(values["database_password"]), 32)
             self.assertIn('prefix = "gcp-lab/runs/37131621545"', backend)
             self.assertEqual(outputs["request"]["source_revision"], "a" * 40)
 

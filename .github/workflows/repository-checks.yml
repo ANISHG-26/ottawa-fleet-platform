@@ -23,3 +23,6 @@ jobs:
           persist-credentials: false
       - name: Check documentation and configuration
         run: python3 scripts/check_repository.py
+      - name: Run bounded offline platform checks
+        run: python3 -m unittest discover -s tests -v
+

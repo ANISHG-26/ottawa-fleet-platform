@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fleet-app
+  labels:
+    platform.ottawa-fleet/owner: bootstrap
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+  labels:
+    platform.ottawa-fleet/owner: bootstrap

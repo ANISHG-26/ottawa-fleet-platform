@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ottawa-fleet
+  namespace: argocd
+  labels:
+    platform.ottawa-fleet/owner: gitops
+spec:
+  description: Ottawa Fleet application namespace boundary
+  sourceRepos:
+    - https://github.com/ANISHG-26/ottawa-fleet-app.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: fleet-app
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ServiceAccount
+    - group: apps
+      kind: Deployment
+    - group: apps
+      kind: StatefulSet
+    - group: batch
+      kind: Job
+  roles: []

@@ -1,12 +1,16 @@
 # Reuse inventory
 
 No historical private project source, personal research, or application chart
-templates have been copied into this repository. Platform tooling is Python
-standard library plus declarative upstream installation/configuration
-references. Recheck release pins and license provenance when updating them.
+templates have been copied into this repository. Operator tooling uses Python's
+standard library; the shutdown function additionally uses the pinned runtime
+dependencies below. Recheck release pins and license provenance when updating them.
 
 | Source / version | License and permission | Files/reference | Purpose | Dependencies | Validation |
 |---|---|---|---|---|---|
+| [Functions Framework 3.10.2](https://pypi.org/project/functions-framework/3.10.2/) | Apache-2.0 ([source/license](https://github.com/GoogleCloudPlatform/functions-framework-python)); package dependency, no source copied | `functions/lab_shutdown/requirements.txt` | HTTP function entrypoint | Python 3.12 and resolver-selected transitive dependencies | Python 3.12 installation and actual framework HTTP startup checked; hosted smoke repeats this without cloud credentials. |
+| [google-auth 2.59.1](https://pypi.org/project/google-auth/2.59.1/) and [Requests 2.34.2](https://pypi.org/project/requests/2.34.2/) | Apache-2.0 ([google-auth](https://github.com/googleapis/google-auth-library-python), [Requests](https://github.com/psf/requests)); package dependencies | Shutdown REST adapter | Short-lived Google credentials and authenticated API calls | Pinned direct dependencies; transitive versions resolve during build | Resolver/startup checked; real cloud authorization remains activation evidence. |
+| [Google Cloud CLI container](https://github.com/GoogleCloudPlatform/cloud-sdk-docker) | Official Google tooling image; SDK component terms apply, Docker build source Apache-2.0; image referenced by immutable SHA-256 | `functions/lab_shutdown/main.py`; CI smoke | Isolated cleanup worker with gcloud and Python | Runtime pulls the digest-pinned upstream image | Hosted worker smoke verifies CLI, Terraform installation and executor startup; no claim of local Docker execution. |
+| [Terraform 1.8.4](https://github.com/hashicorp/terraform/releases/tag/v1.8.4) | BUSL-1.1 ([license](https://github.com/hashicorp/terraform/blob/v1.8.4/LICENSE)); internal infrastructure automation, no source copied | `scripts/cleanup_execute.py` | Destroy the exact run's GCS-backed state | Official Linux ZIP, architecture-specific upstream SHA-256 hard-pinned | Corrupt archive rejection tested; hosted worker smoke verifies downloaded archive and executable. |
 | [kind v0.33.0](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0) | Apache-2.0 ([license](https://github.com/kubernetes-sigs/kind/blob/main/LICENSE)); upstream project, no source copied | `bootstrap/kind.yaml`; pinned kind node image | Disposable local Kubernetes nodes in Docker | Docker, kind, kubectl; none bundled | Offline config and pin checks. No cluster started. |
 | [kind node image v1.35.8](https://github.com/kubernetes-sigs/kind/releases) | Kubernetes components Apache-2.0 ([license](https://github.com/kubernetes/kubernetes/blob/master/LICENSE)); upstream image, not redistributed here | immutable `kindest/node` reference in `bootstrap/kind.yaml` | Pin Kubernetes node contents by digest | Docker pulls image only when operator creates kind cluster | Pin syntax checked; pull/cluster unverified. |
 | [Argo CD v3.5.3](https://github.com/argoproj/argo-cd/releases/tag/v3.5.3) | Apache-2.0 ([license](https://github.com/argoproj/argo-cd/blob/master/LICENSE)); upstream manifest prepared on demand and verified against operator-supplied SHA-256 | `scripts/local_cluster.py`; generated versioned manifest | Disposable-lab GitOps controller | Kubernetes/kubectl; no vendored dependency | Fixed URL, no redirect, 8 MiB cap, SHA-256 comparison; no manifest retrieved or installed. |

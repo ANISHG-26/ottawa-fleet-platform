@@ -35,6 +35,18 @@ variable "cluster_name" {
   }
 }
 
+variable "retained_network_name" {
+  description = "Optional name of a separately managed retained VPC in project_id. When null, this root creates its current dedicated lab VPC."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.retained_network_name == null ? true : can(regex("^[a-z]([-a-z0-9]*[a-z0-9])?$", var.retained_network_name))
+    error_message = "retained_network_name must be a valid existing VPC name when provided."
+  }
+}
+
 variable "node_service_account_id" {
   description = "ID of the separately managed node service account, already granted roles/container.defaultNodeServiceAccount."
   type        = string

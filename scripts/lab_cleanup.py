@@ -5,6 +5,9 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
+import secrets
+import subprocess
+import tarfile
 from pathlib import Path
 
 MAX_LAB_SECONDS = 2 * 60 * 60
@@ -83,7 +86,12 @@ def write_run_inputs(*, run_id: str, source_revision: str, started_at: str, expi
         raise ValueError("private Terraform variables must be a JSON object") from exc
     if not isinstance(reviewed, dict):
         raise ValueError("private Terraform variables must be a JSON object")
-    unknown = set(reviewed) - (_REVIEWED_TFVARS | {"cluster_name", "teardown_deadline"})
+    allowed_extra = {
+        "cluster_name", "teardown_deadline", "retained_network_name", "cloudsql_enabled",
+        "cloudsql_plan_reviewed", "cloudsql_quota_reviewed", "cloudsql_pricing_reviewed",
+        "cloudsql_inventory_reference", "database_password",
+    }
+    unknown = set(reviewed) - (_REVIEWED_TFVARS | allowed_extra)
     if unknown:
         raise ValueError("unexpected private Terraform variables: " + ", ".join(sorted(unknown)))
     missing = _REVIEWED_TFVARS - reviewed.keys()
@@ -109,6 +117,16 @@ def write_run_inputs(*, run_id: str, source_revision: str, started_at: str, expi
 
     values = dict(reviewed)
     values["cluster_name"] = cluster_name
+    if not isinstance(values.get("retained_network_name"), str) or not values["retained_network_name"].strip():
+        raise ValueError("retained_network_name must identify the separately reviewed CI network")
+    if values.get("cloudsql_enabled") is not True:
+        raise ValueError("CI lab runs require the reviewed private Cloud SQL database")
+    for key in ("cloudsql_plan_reviewed", "cloudsql_quota_reviewed", "cloudsql_pricing_reviewed"):
+        if values.get(key) is not True:
+            raise ValueError(f"{key} must be true for the reviewed CI database shape")
+    if not isinstance(values.get("cloudsql_inventory_reference"), str) or len(values["cloudsql_inventory_reference"].strip()) < 3:
+        raise ValueError("cloudsql_inventory_reference must identify the private reviewed database inputs")
+    values["database_password"] = secrets.token_urlsafe(36)
     expiry = _utc_timestamp(expires_at, "expires_at")
     values["teardown_deadline"] = expiry.isoformat(timespec="seconds").replace("+00:00", "Z")
     root = Path(output_dir).expanduser().resolve(strict=False)
@@ -133,3 +151,36 @@ def write_run_inputs(*, run_id: str, source_revision: str, started_at: str, expi
         "request_file": str(request_path),
         "request": request,
     }
+
+
+def create_source_archive(*, source_revision: str, output_path: str | Path,
+                          repo_root: str | Path | None = None,
+                          paths: tuple[str, ...] = ("terraform/lab", "scripts/lab_cleanup.py",
+                                                    "scripts/cleanup_execute.py", "scripts/__init__.py")) -> Path:
+    """Archive only cleanup code and Terraform from the exact committed revision."""
+    if not isinstance(source_revision, str) or not _REVISION.fullmatch(source_revision) or set(source_revision) == {"0"}:
+        raise ValueError("source_revision must be a non-placeholder full Git commit SHA")
+    root = Path(repo_root or Path(__file__).resolve().parents[1]).resolve(strict=True)
+    output = Path(output_path).expanduser().resolve(strict=False)
+    if output.is_relative_to(root):
+        raise ValueError("private source archive must be written outside the public repository")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    allowed = {"terraform/lab", "scripts/lab_cleanup.py", "scripts/cleanup_execute.py", "scripts/__init__.py"}
+    if not paths or set(paths) - allowed:
+        raise ValueError("source archive paths must use the cleanup source allowlist")
+    archive = subprocess.run(
+        ["git", "archive", "--format=tar.gz", source_revision, "--", *paths], cwd=root,
+        check=True, capture_output=True,
+    ).stdout
+    # Reject malformed archives before they are uploaded to durable cleanup storage.
+    import io
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as source:
+        if not source.getmembers():
+            raise ValueError("source archive is empty")
+        for member in source.getmembers():
+            if member.name.startswith("/") or ".." in Path(member.name).parts:
+                raise ValueError("source archive contains an unsafe path")
+    output.write_bytes(archive)
+    if os.name != "nt":
+        output.chmod(0o600)
+    return output

@@ -146,7 +146,7 @@ run "rejects_unrestricted_control_plane_cidr" {
 }
 
 run "accepts_reviewed_bounded_shape_without_node_autoscaling" {
-  command = plan
+  command = apply
 
   variables {
     project_id                     = "fleet-lab-12345"
@@ -177,7 +177,8 @@ run "accepts_reviewed_bounded_shape_without_node_autoscaling" {
       length(google_container_node_pool.lab.autoscaling) == 0 &&
       google_container_node_pool.lab.node_config[0].machine_type == var.machine_type &&
       google_container_node_pool.lab.node_config[0].disk_size_gb == var.node_disk_size_gb &&
-      google_container_cluster.lab.enable_autopilot == false &&
+      google_container_cluster.lab.remove_default_node_pool &&
+      google_container_cluster.lab.initial_node_count == 1 &&
       google_container_cluster.lab.network == google_compute_network.lab.id &&
       google_container_cluster.lab.subnetwork == google_compute_subnetwork.lab.id
     )

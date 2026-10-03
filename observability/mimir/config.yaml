@@ -1,0 +1,50 @@
+target: all
+multitenancy_enabled: false
+server:
+  http_listen_port: 9009
+  log_level: warn
+  grpc_server_max_recv_msg_size: 10485760
+  grpc_server_max_send_msg_size: 10485760
+common:
+  storage:
+    backend: filesystem
+    filesystem:
+      dir: /data/blocks
+blocks_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/blocks
+  tsdb:
+    dir: /data/tsdb
+    retention_period: 24h
+  bucket_store:
+    sync_dir: /data/tsdb-sync
+ruler_storage:
+  backend: filesystem
+  filesystem:
+    dir: /data/rules
+compactor:
+  data_dir: /data/compactor
+  sharding_ring:
+    kvstore:
+      store: inmemory
+ingester:
+  ring:
+    replication_factor: 1
+    kvstore:
+      store: inmemory
+store_gateway:
+  sharding_ring:
+    replication_factor: 1
+    kvstore:
+      store: inmemory
+usage_stats:
+  enabled: false
+limits:
+  max_global_series_per_user: 10000
+  max_global_series_per_metric: 2000
+  compactor_blocks_retention_period: 24h
+  ingestion_rate: 10000
+  ingestion_burst_size: 20000
+ingest_storage:
+  enabled: false

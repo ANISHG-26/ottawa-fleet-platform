@@ -1,0 +1,39 @@
+{
+  "uid": "ottawa-fleet-local",
+  "title": "Ottawa Fleet local telemetry",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Pending ride jobs",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "ride_pending_jobs", "legendFormat": "pending", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 2,
+      "title": "Assignment jobs completed",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "mimir" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "assignment_completed_total", "legendFormat": "completed", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "title": "Recent application logs",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 8 },
+      "targets": [{ "expr": "{job=\"ottawa-fleet\", service=~\"fleet-api|ride-api|assignment-worker\"}", "refId": "A" }],
+      "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "sortOrder": "Descending", "dedupStrategy": "none" }
+    }
+  ],
+  "annotations": { "list": [] },
+  "templating": { "list": [] }
+}

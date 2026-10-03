@@ -1,0 +1,128 @@
+name: ottawa-fleet-telemetry
+
+services:
+  telemetry-data-init:
+    image: busybox:1.37.0
+    user: "0:0"
+    entrypoint: ["sh", "-ec"]
+    command: ["chown 10001:10001 /loki /tempo /mimir && chmod 0750 /loki /tempo /mimir"]
+    volumes:
+      - loki_data:/loki
+      - tempo_data:/tempo
+      - mimir_data:/mimir
+    deploy:
+      resources:
+        limits: {cpus: "0.10", memory: 32M}
+    restart: "no"
+
+  grafana:
+    image: grafana/grafana:13.2.2
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    secrets:
+      - grafana_admin_password
+    entrypoint: ["/bin/sh", "-ec"]
+    command: ["test -s /run/secrets/grafana_admin_password && exec /run.sh"]
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - loki
+      - mimir
+      - tempo
+    networks: [telemetry]
+    deploy:
+      resources:
+        limits: {cpus: "0.50", memory: 384M}
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.7.0
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/data
+    depends_on:
+      telemetry-data-init:
+        condition: service_completed_successfully
+    networks: [telemetry]
+    deploy:
+      resources:
+        limits: {cpus: "0.50", memory: 384M}
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:3.0.3
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    volumes:
+      - ./tempo/config.yaml:/etc/tempo/config.yaml:ro
+      - tempo_data:/data
+    depends_on:
+      telemetry-data-init:
+        condition: service_completed_successfully
+    networks: [telemetry]
+    deploy:
+      resources:
+        limits: {cpus: "0.50", memory: 384M}
+    restart: unless-stopped
+
+  mimir:
+    image: grafana/mimir:3.2.1
+    command: ["-config.file=/etc/mimir/config.yaml"]
+    user: "10001:10001"
+    volumes:
+      - ./mimir/config.yaml:/etc/mimir/config.yaml:ro
+      - mimir_data:/data
+    depends_on:
+      telemetry-data-init:
+        condition: service_completed_successfully
+    networks: [telemetry]
+    deploy:
+      resources:
+        limits: {cpus: "1.00", memory: 768M}
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.20.1
+    command: ["run", "/etc/alloy/config.alloy", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy/data", "--stability.level=experimental"]
+    ports:
+      - "127.0.0.1:4318:4318"
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - telemetry_logs:/var/log/fleet:ro
+      - alloy_data:/var/lib/alloy/data
+    networks:
+      - telemetry
+      - app
+    deploy:
+      resources:
+        limits: {cpus: "0.50", memory: 256M}
+    restart: unless-stopped
+
+volumes:
+  grafana_data:
+  loki_data:
+  tempo_data:
+  mimir_data:
+  alloy_data:
+  telemetry_logs:
+    name: ottawa-fleet-app-telemetry-logs
+    external: true
+
+secrets:
+  grafana_admin_password:
+    environment: GRAFANA_ADMIN_PASSWORD
+
+networks:
+  telemetry:
+    name: ottawa-fleet-telemetry
+    driver: bridge
+  app:
+    name: ottawa-fleet-app
+    external: true

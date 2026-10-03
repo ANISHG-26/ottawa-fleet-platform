@@ -177,6 +177,7 @@ run "accepts_reviewed_bounded_shape_without_node_autoscaling" {
       length(google_container_node_pool.lab.autoscaling) == 0 &&
       google_container_node_pool.lab.node_config[0].machine_type == var.machine_type &&
       google_container_node_pool.lab.node_config[0].disk_size_gb == var.node_disk_size_gb &&
+      google_container_cluster.lab.enable_autopilot == false &&
       google_container_cluster.lab.network == google_compute_network.lab.id &&
       google_container_cluster.lab.subnetwork == google_compute_subnetwork.lab.id
     )

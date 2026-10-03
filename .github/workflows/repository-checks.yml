@@ -42,6 +42,15 @@ jobs:
       - name: Initialize the pinned provider without backend access
         run: terraform init -backend=false -input=false
         working-directory: terraform/lab
+      - name: Lock the supported provider platforms
+        run: terraform providers lock -platform=linux_amd64 -platform=windows_amd64
+        working-directory: terraform/lab
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-provider-lock
+          path: terraform/lab/.terraform.lock.hcl
+          include-hidden-files: true
+          if-no-files-found: error
       - name: Check Terraform formatting
         run: terraform fmt -check -recursive
         working-directory: terraform/lab

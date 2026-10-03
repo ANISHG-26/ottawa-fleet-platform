@@ -56,7 +56,6 @@ resource "google_container_cluster" "lab" {
   project                  = var.project_id
   name                     = var.cluster_name
   location                 = var.zone
-  enable_autopilot         = false
   network                  = google_compute_network.lab.id
   subnetwork               = google_compute_subnetwork.lab.id
   networking_mode          = "VPC_NATIVE"

@@ -104,7 +104,7 @@ class ReleasePinTests(unittest.TestCase):
 def complete_report():
     endpoints = {
         'ui': '<html>operator</html>', 'fleet-ready': '{"status":"ok"}',
-        'fleet': '{"items":[],"next_cursor":null,"as_of":"2026-01-01T00:00:00Z"}',
+        'fleet': '{"items":[{"vehicle_id":"vehicle-001"}],"next_cursor":null,"as_of":"2026-01-01T00:00:00Z"}',
         'fleet-metrics': 'fleet_http_requests_total 12\nfleet_http_request_duration_seconds_bucket{le="0.1"} 12\n',
         'ride-ready': '{"status":"ok"}',
         'rides': '{"items":[{"ride_id":"ride-001"}],"next_cursor":null}',

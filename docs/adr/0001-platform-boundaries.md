@@ -1,6 +1,6 @@
 # ADR 0001: Platform boundaries and initial shape
 
-- **Status:** Accepted as the initial design direction; implementation and deployment remain unverified.
+- **Status:** Historical; superseded for layout, application scope, cloud sequencing and AI hosting by [ADR 0002](0002-two-repository-local-first-platform.md). Synthetic-only and evidence boundaries remain applicable. Implementation and deployment remain unverified.
 - **Date:** 2026-10-03
 
 ## Context

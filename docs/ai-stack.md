@@ -1,26 +1,21 @@
-# Investigator AI stack (proposal)
+# Future AI SRE and inference boundary
 
-The investigator is a thin, read-only aid for examining synthetic fleet telemetry and producing evidence-backed summaries. It does not control vehicles, change cloud resources, or make safety decisions. This repository is a scaffold; no model integration or deployment is implemented.
+AI is Phase 4, after measured platform evidence and runbooks. No model integration, runtime or remediation is implemented.
 
-## Initial design
+## Investigator in this project
 
-Use a provider-neutral investigator with small provider adapters. The initial hosted-provider candidates are Groq and Gemini free access, subject to checking current terms, availability, limits, and account eligibility before use. Do not claim a particular free quota or service guarantee without a current provider source. Keep API keys outside the repository and logs; never commit key files, service-account JSON, credentials, or private account details.
+Platform owns bounded evidence tools and a provider-neutral inference client. Diagnosis starts read-only: parameterized allowlisted queries, time/result/call/token bounds, deadlines, bounded retries and citations. Telemetry and model output are untrusted; no arbitrary SQL or shell execution is exposed.
 
-Expose only read-only evidence tools. Each tool must have an explicit allowlist of operations and data sources, bounded input size, a timeout, a maximum call count per investigation, and bounded retries. Cache safe repeatable lookups where appropriate, with a documented expiry. On provider failure or exhausted limits, return a clear unavailable/partial result and the evidence already collected; do not fabricate model output or silently switch providers in a way that hides provenance. Label provider and model metadata when known.
+On failure, return collected evidence and label unavailable conclusions. Identify provider/model provenance and uncertainty. Verify actual provider eligibility, limits, data handling and prices when selecting an adapter.
 
-Treat telemetry, retrieved text, and model output as untrusted. Use synthetic records, validate tool arguments and output schemas, and prevent tool output from invoking writes or expanding the allowlist. Recommendations remain advisory and require human review.
+## Hosting in a separate future project
 
-## Later CPU and GPU evaluation
+CPU/GPU hosting needs its own repository, capacity/lifecycle planning, model license review and evaluation when activated. No third repository or model runtime is created now. This platform consumes an authenticated bounded endpoint.
 
-First benchmark a suitable open model on ordinary CPU hardware using a fixed synthetic workload. Record model/version, hardware, runtime settings, latency, memory use, output quality rubric, and repeatability. Compare results with hosted adapters before considering specialized hardware.
+CPU/GPU backlog tickets preserve the learning goals and handoff. Later experiments verify provider eligibility/quotas, measure memory/latency and quality, and prove teardown. Credits do not establish GPU access or authorize billing upgrades.
 
-GPU scheduling is a later feasibility gate, not a current requirement. The unupgraded GCP Free Trial cannot be used to provision GPU VMs; do not upgrade billing to bypass this gate. Before any GPU proposal, verify account eligibility, regional GPU quota and availability, API enablement, disk/IP/network quotas, and cost from current provider sources. A Kubernetes experiment would also need an installed NVIDIA device plugin, node taints/tolerations, and pod requests such as `nvidia.com/gpu`; a manifest alone does not make a GPU available. Schedule bounded batch jobs with explicit concurrency, deadlines, and teardown ownership, and compare their resource fit and lifecycle cost with CPU execution.
+## Staged remediation
 
-## Success criteria and evidence
+After diagnosis, explore one service-recovery action. Separate evidence, diagnosis, policy, approval, execution and verification in the audit record. Use a narrow allowlist, least-privilege identity, cooldown, attempt cap, kill switch and rollback. Resolve conflicts with Argo/KEDA ownership.
 
-- Every investigation uses synthetic evidence and the read-only allowlist; tool calls stay within recorded size, timeout, retry, and call-count bounds.
-- Outputs identify their evidence and provider/model provenance when available, represent unavailable results honestly, and contain no invented findings.
-- A CPU benchmark is reproducible from its recorded workload and environment before GPU work is proposed.
-- Any future GPU decision includes current eligibility, quota, availability, pricing, scheduling, and teardown evidence. Until then, GPU provisioning remains out of scope.
-
-These criteria describe future acceptance evidence. They do not claim that adapters, benchmarks, GPU manifests, or cloud resources currently exist.
+Start supervised. Automatic execution requires a separately reviewed activation decision after failure-path tests. No vehicle actions or unconstrained commands are in scope.

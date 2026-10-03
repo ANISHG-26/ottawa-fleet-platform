@@ -1,25 +1,29 @@
 # Roadmap
 
-The [Project board](https://github.com/users/ANISHG-26/projects/6) tracks review state. These are planned outcomes, not completed functionality.
+The [shared board](https://github.com/users/ANISHG-26/projects/6) is the current queue. Matching milestones describe the same phase, although GitHub milestone objects are repository-local. There is no invented deadline or production availability commitment.
 
-## Weekend vertical slice
+| Phase | Outcome | Exit evidence |
+|---|---|---|
+| P0 - Delivery foundation | Two repos, ownership, bounded tickets and dependencies | Reviewed/merged scaffold PRs, passing checks and board audit |
+| P1 - Local application | APIs, durable jobs/worker, UI, scenarios, Compose and CI | Fresh start, visible ride journey, failure/recovery and resource baseline |
+| P2 - Kubernetes and GitOps | Chart/images, bootstrap/promotion, observability and rollback | Pinned deployment, drift correction, compatible rollback and teardown |
+| P3 - Scaling and traffic | Separate KEDA and Istio experiments | Fixed-load comparisons, caps, traffic/failure results and cleanup |
+| P4 - Developer experience and AI | Backstage, diagnosis and staged remediation | Working catalog/evidence links and separately reviewed recovery policy |
 
-1. Foundation: public docs, private-note separation, layout, documentation CI and issue workflow.
-2. Cloud readiness: confirm trial status, APIs, CPU/disk/IP quotas, cluster sizing, estimate and teardown plan. Record account-specific evidence privately.
-3. Telemetry contract and simulator: seeded Ottawa zones, event IDs, vehicle sequence, UTC timestamps, battery and state. Demonstrate Lansdowne demand surge.
-4. Ingestion and fleet state: validated append-only events, deduplication, sequence ordering, projector replay and stale/unknown capacity.
-5. GitOps deployment: immutable prebuilt images, Helm and Argo CD; measure real cluster allocatable resources and footprint.
-6. Investigator: bounded read-only queries and inference, evidence-linked reports, explicit uncertainty and model failure handling.
-7. Recovery demo: interrupt processing, observe staleness, investigate, restore/replay, verify no state regression and measure recovery.
-8. Backstage: catalog services, ownership and runbooks; add live integrations after the core demo fits.
+## Phase 1 sequence
 
-Minimum portfolio evidence: repeatable incident demonstration, architecture, focused PRs, measured resource use and verified teardown. Record partial results honestly if the weekend ends first.
+1. Review foundations, then specify API/job contracts and fixtures.
+2. Implement fleet and ride APIs; develop UI against fixtures and introduce service CI alongside implementation.
+3. Add worker concurrency/crash recovery and the bounded scenario CLI.
+4. Package the integrated app in Compose and run its browser journey.
+5. Platform verifies fresh setup, worker outage/backlog/recovery, API degradation and resource use.
 
-## Follow-on experiments
+Application's parent outcome tracks component delivery. Platform's separate acceptance ticket validates the workload. Completion of the app epic does not establish platform acceptance.
 
-- CPU-hosted open model: compare memory, latency and evidence quality against hosted inference using identical incidents.
-- GPU scheduling: eligibility/quota/cost gate, device plugin, tainted nodes, GPU resource requests, bounded inference concurrency.
-- Self-healing: separate diagnosis, policy, approval and execution; begin with service recovery.
-- Terraform: add after the deployment shape stabilizes.
+## Cloud and AI branches
 
-An unupgraded GCP Free Trial blocks GPU VMs. Credits do not remove this restriction. [Trial policy](https://docs.cloud.google.com/free/docs/free-cloud-features).
+GCP feasibility follows local measurements and does not block local Kubernetes. Terraform belongs in platform after the deployment shape and cloud inventory are reviewed. No ticket authorizes a billing upgrade or unreviewed provisioning.
+
+Inference hosting belongs in a separate future project. CPU/GPU issues retain evaluation/feasibility goals only. The fleet investigator consumes an endpoint; it does not require a model in this cluster. Remediation follows diagnosis and requires policy, verification, cooldowns and rollback.
+
+See [project management](project-management.md) for links, readiness and ownership.

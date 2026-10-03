@@ -1,3 +1,5 @@
-# Tests
+# Platform acceptance
 
-Future behavior tests cover validation, deduplication, ordering, staleness, evidence attribution and recovery. The initial scaffold has documentation checks only.
+Local application handoff, deployment/promotion, drift, rollback and bounded scaling/traffic experiments. Application behavior tests belong in the app repo.
+
+Reserved scope only. No runtime implementation exists yet.

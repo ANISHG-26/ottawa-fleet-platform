@@ -1,13 +1,14 @@
 ## Problem and resulting behavior
 
-Related issue:
+Related issue and team:
 
 ## Validation
 
 - Commands and observed results:
 - Acceptance evidence:
+- Cross-repository contract or release impact:
 
-## Limitations and resource impact
+## Limitations and lifecycle
 
 - Remaining uncertainty:
-- Cloud resources and teardown required:
+- Resources, rollback and cleanup:

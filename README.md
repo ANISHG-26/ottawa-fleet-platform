@@ -1,43 +1,45 @@
 # Ottawa Fleet Platform
 
-A platform engineering lab for a fictional electric robotaxi fleet in Ottawa. During a Lansdowne event surge, distinguish available capacity from vehicles with stale telemetry, low battery or maintenance flags. An operations investigator explains incidents using recorded evidence.
+The platform team's repository for operating a small mock Ottawa fleet application. Learning goals: application delivery, Kubernetes, GitOps, scaling, service traffic, observability and eventually AI-assisted operations.
 
-**Status: documentation and repository scaffold. No application, cluster or model deployment has been implemented or benchmarked.**
+**Status: planning and documentation scaffold. No cluster, controller, Terraform module or AI service has been implemented or deployed.**
 
-## What we are building
+## Two repositories, one program
 
-Synthetic fleet telemetry and replay; Kubernetes deployments through Argo CD; Backstage service ownership; observability and measured recovery; a read-only AI investigator; repeatable lab setup and verified teardown.
+| Logical team | Repository | Owns |
+|---|---|---|
+| Application | [ottawa-fleet-app](https://github.com/ANISHG-26/ottawa-fleet-app) | Go APIs/workers, UI, contracts, migrations, Dockerfiles, Compose, application Helm chart and releases |
+| Platform | This repository | Cluster bootstrap, environment values/release pins, Argo CD, KEDA, Istio, Terraform, observability, runbooks and later Backstage/AI SRE |
 
-This is a simulation, not autonomous driving software. Vehicle control and real safety decisions are outside its authority.
+Both use the [shared project board](https://github.com/users/ANISHG-26/projects/6). Teams are responsibility boundaries for a solo learning project, not claims of staffed organizational teams.
+
+Phase 1 builds and validates the application locally. Kubernetes/GitOps follow in Phase 2; KEDA and Istio in Phase 3; Backstage and AI SRE in Phase 4. Inference hosting is a separate future project. Cloud access is not a prerequisite for local work.
 
 ## Start here
 
-- [Architecture](docs/architecture.md)
-- [Roadmap](docs/roadmap.md)
-- [AI stack and GPU feasibility](docs/ai-stack.md)
+- [Architecture and ownership](docs/architecture.md)
+- [Delivery workflow and ticket map](docs/project-management.md)
+- [Application release contract](docs/application-release-contract.md)
+- [Roadmap and exit criteria](docs/roadmap.md)
+- [Current ADR](docs/adr/0002-two-repository-local-first-platform.md)
 - [Lab lifecycle](docs/runbooks/lab-lifecycle.md)
-- [Contribution workflow](CONTRIBUTING.md)
-- [Code reuse inventory](docs/reuse.md)
-- [Project board](https://github.com/users/ANISHG-26/projects/6)
+- [Future AI boundary](docs/ai-stack.md)
+- [Contributing](CONTRIBUTING.md)
 
-## Proposed deployment
-
-One GKE Standard cluster hosts fleet services, PostgreSQL, Backstage, Argo CD and compact observability. GitHub Actions builds images outside the cluster. Hosted inference is the initial option; CPU inference is a measured follow-on experiment. GPU deployment requires a separate eligibility and quota gate. Terraform is deferred.
-
-## Repository layout
+## Layout
 
 ```text
-apps/        # Simulator, ingestion, API/dashboard, investigator
-platform/    # Backstage, Argo CD, observability
-deploy/      # Helm charts and environment configuration
-contracts/   # Telemetry and incident schemas
-tests/       # Behavior, integration and recovery checks
-scripts/     # Local checks and future lab commands
-docs/        # Architecture, ADRs, evidence and runbooks
-.github/     # Issue/PR templates and CI
+bootstrap/    # Future local cluster and controller bootstrap
+gitops/       # Future Argo applications, release pins and environment values
+controllers/  # Future KEDA, Istio, monitoring and Backstage configuration
+terraform/    # Future approved infrastructure modules/environments
+tests/        # Future platform acceptance and experiment checks
+scripts/      # Scaffold checks; future platform lifecycle commands
+docs/         # Architecture, ADRs, ownership, experiments and runbooks
+.github/      # Issue/PR templates and documentation CI
 ```
 
-These directories do not yet contain runnable services. Private deliberations and account-specific notes remain outside this Git repository.
+Operational directories currently contain boundary descriptions only. Application source and Helm templates live in the application repository.
 
 ## Validate the scaffold
 
@@ -45,4 +47,4 @@ These directories do not yet contain runnable services. Private deliberations an
 python scripts/check_repository.py
 ```
 
-Checks cover required docs, local Markdown links and JSON. They do not establish application correctness or cloud feasibility. Future service checks must have the same entry points locally and in CI.
+This checks required files, local Markdown links and JSON; it is not an application/deployment test. Keep private deliberations, account identifiers and credentials outside both public checkouts.

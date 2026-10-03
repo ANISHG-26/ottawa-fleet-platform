@@ -1,21 +1,27 @@
 ---
-name: Bounded implementation or experiment
-about: One reviewable outcome with acceptance evidence
+name: Bounded delivery outcome
+about: One reviewable behavior or measured experiment
 title: ''
-labels: ''
+labels: 'type:task'
 assignees: ''
 ---
 
-## Problem or question
+## Outcome
+Who needs what behavior, and why?
 
-## Scope and dependencies
+## Ownership and phase
+Application or Platform; phase/milestone. Claim an assignee when starting.
+
+## Scope and exclusions
 
 ## Acceptance criteria
+- [ ] Observable outcome
 
-- [ ]
+## Dependencies
+Link blockers and parent outcome; also set native blocked-by/sub-issue relationships.
 
-## Evidence and validation
+## Validation evidence
+Commands, behavior tests, screenshots or measured baseline/trigger/result as applicable.
 
 ## Resource lifecycle
-
-Resource needs, duration and teardown verification; None for documentation-only work.
+None for docs; otherwise resources, caps, duration and exact cleanup.

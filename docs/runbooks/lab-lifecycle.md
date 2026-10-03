@@ -1,11 +1,11 @@
 # Cloud lab lifecycle (draft)
 
-This is a proposed operating procedure for short, disposable learning labs. The repository scaffold has no deployment, Terraform, or scheduled automation. No cloud resources have been provisioned by this project.
+This is a proposed operating procedure for optional cloud labs after Phase 1 local acceptance. Local application and local Kubernetes work do not depend on this gate. The repository scaffold has no deployment, Terraform, or scheduled automation. No cloud resources have been provisioned by this project.
 
 ## Gate before provisioning
 
-- [ ] Confirm the active Google Cloud project and account type from the console; record the confirmation date and evidence link in a private lab log. The known account is an unupgraded GCP Free Trial. Do not upgrade billing to work around trial restrictions.
-- [ ] Treat GPU VM creation as prohibited while the trial is unupgraded. GPU work remains a feasibility-gated future experiment.
+- [ ] Confirm the active Google Cloud project and account type from the console; record the confirmation date and evidence link in a private lab log. Verify current eligibility privately; do not publish account-specific claims. Do not upgrade billing to work around trial restrictions.
+- [ ] Exclude GPU provisioning from this fleet lab. A separate future AI project must verify current provider restrictions and eligibility.
 - [ ] Check current project/API enablement and applicable CPU, disk, external IP, load balancer, and networking/NAT quotas in the console for the intended region. Record observed quota, current use, needed headroom, region, and evidence links. Do not assume a quota from a published “free” allowance.
 - [ ] Write a resource inventory with exact project, region, resource names, owner, purpose, planned size/count, start time, teardown deadline and deletion method. Include cluster/node pool, disks, images, addresses, load balancers, NAT and logging.
 - [ ] Estimate cost using current provider pricing and the inventory. Set a short session deadline and a human owner who will verify teardown. Limits and quotas are constraints, not budget caps or cost guarantees.
@@ -14,7 +14,7 @@ This is a proposed operating procedure for short, disposable learning labs. The 
 
 ## Proposed lab shape
 
-The learning target is one GKE Standard cluster in a single region, created only after every gate above passes. This is a proposal, not an implemented deployment. Begin with the smallest suitable CPU node pool and one bounded exercise. Record exact names before creating anything. Terraform is deferred; do not imply that infrastructure-as-code or repeatable deployment exists.
+An optional cloud target is one GKE Standard cluster in a single region, created only after every gate above passes. This is a proposal, not an implemented deployment. Begin with the smallest suitable CPU node pool and one bounded exercise. Record exact names before creating anything. Terraform belongs in this repository after the workload and deployment shape stabilize; no infrastructure code or repeatable cloud deployment exists yet.
 
 ## Shutdown and teardown
 

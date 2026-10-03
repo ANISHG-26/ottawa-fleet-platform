@@ -7,9 +7,22 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = (
-    "README.md", "AGENTS.md", "CONTRIBUTING.md", "docs/architecture.md",
-    "docs/roadmap.md", "docs/ai-stack.md", "docs/reuse.md",
-    "docs/runbooks/lab-lifecycle.md", "docs/adr/0001-platform-boundaries.md",
+    "README.md",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "docs/architecture.md",
+    "docs/roadmap.md",
+    "docs/project-management.md",
+    "docs/application-release-contract.md",
+    "docs/ai-stack.md",
+    "docs/reuse.md",
+    "docs/runbooks/lab-lifecycle.md",
+    "docs/adr/0001-platform-boundaries.md",
+    "docs/adr/0002-two-repository-local-first-platform.md",
+    "bootstrap/README.md",
+    "gitops/README.md",
+    "controllers/README.md",
+    "terraform/README.md",
     ".github/workflows/repository-checks.yml",
 )
 errors = []

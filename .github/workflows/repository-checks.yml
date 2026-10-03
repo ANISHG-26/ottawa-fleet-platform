@@ -91,6 +91,6 @@ jobs:
           docker run --rm --read-only --tmpfs /tmp:size=384m \
             -e CLOUDSDK_CONFIG=/tmp/gcloud \
             -v "$GITHUB_WORKSPACE:/workspace:ro" -w /workspace \
-            --entrypoint python3 \
+            --entrypoint /bin/sh \
             gcr.io/google.com/cloudsdktool/google-cloud-cli:stable@sha256:73a97b855d386c74bee3facd59ccc261006c55a9812b7913fa6b93816010a1bc \
-            -c 'import subprocess,tempfile; from pathlib import Path; from scripts.cleanup_execute import install_terraform; subprocess.run(["gcloud","version"],check=True); temporary=tempfile.TemporaryDirectory(); binary=install_terraform(Path(temporary.name)); subprocess.run([str(binary),"version"],check=True); subprocess.run(["python3","-m","scripts.cleanup_execute","--help"],check=True)'
+            -c 'exec "$(gcloud info --format="value(basic.python_location)")" -m scripts.smoke_cleanup_worker'

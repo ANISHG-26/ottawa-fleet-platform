@@ -89,6 +89,7 @@ jobs:
       - name: Verify the immutable cleanup image and Terraform archive
         run: |
           docker run --rm --read-only --tmpfs /tmp:size=384m \
+            -e CLOUDSDK_CONFIG=/tmp/gcloud \
             -v "$GITHUB_WORKSPACE:/workspace:ro" -w /workspace \
             --entrypoint python3 \
             gcr.io/google.com/cloudsdktool/google-cloud-cli:stable@sha256:73a97b855d386c74bee3facd59ccc261006c55a9812b7913fa6b93816010a1bc \

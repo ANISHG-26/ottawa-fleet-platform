@@ -88,7 +88,7 @@ jobs:
           persist-credentials: false
       - name: Verify the immutable cleanup image and Terraform archive
         run: |
-          docker run --rm --read-only --tmpfs /tmp:size=384m \
+          docker run --rm --read-only --tmpfs /tmp:size=384m,exec \
             -e CLOUDSDK_CONFIG=/tmp/gcloud \
             -e SSL_CERT_FILE=/usr/lib/google-cloud-sdk/lib/third_party/certifi/cacert.pem \
             -v "$GITHUB_WORKSPACE:/workspace:ro" -w /workspace \

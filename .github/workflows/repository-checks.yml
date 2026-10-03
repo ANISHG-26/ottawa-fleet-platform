@@ -90,6 +90,7 @@ jobs:
         run: |
           docker run --rm --read-only --tmpfs /tmp:size=384m \
             -e CLOUDSDK_CONFIG=/tmp/gcloud \
+            -e SSL_CERT_FILE=/usr/lib/google-cloud-sdk/lib/third_party/certifi/cacert.pem \
             -v "$GITHUB_WORKSPACE:/workspace:ro" -w /workspace \
             --entrypoint /bin/sh \
             gcr.io/google.com/cloudsdktool/google-cloud-cli:stable@sha256:73a97b855d386c74bee3facd59ccc261006c55a9812b7913fa6b93816010a1bc \

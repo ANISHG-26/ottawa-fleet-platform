@@ -12,7 +12,8 @@ spec:
   type: LoadBalancer
   # Use an ephemeral address retained for the lifetime of this Service.
   loadBalancerSourceRanges:
-    - 0.0.0.0/0
+    # Inert default: replace through a private overlay with the reviewer's IPv4 /32.
+    - 0.0.0.0/32
   selector:
     app.kubernetes.io/name: fleet-gateway
   ports:

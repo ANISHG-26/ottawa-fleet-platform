@@ -7,12 +7,18 @@ redirects to HTTPS): `/` reaches `web.fleet-app:8080`, `/grafana/` reaches
 The app, Grafana and Argo services remain ClusterIP services. Redis,
 controller metrics and telemetry stores are not routed.
 
-The deployment requires two operator-provided inputs, intentionally kept out
+The deployment requires three operator-provided inputs, intentionally kept out
 of Git: a `fleet-gateway/fleet-gateway-tls` TLS Secret whose certificate has
 the public IP in its IP SAN, and a `fleet-gateway/argocd-server-ca` ConfigMap with
 key `ca.crt` containing the issuer for the Argo server certificate. The gateway
 verifies Argo's upstream TLS certificate and SNI name `argocd-server`.
 Inspect the Argo certificate SAN and issuer before creating that ConfigMap.
+The third input is the reviewer's current public IPv4 `/32` in the Service's
+`loadBalancerSourceRanges`. The checked-in Service uses an inert `0.0.0.0/32`
+default; render a private overlay with the approved reviewer address before
+applying. Never use `0.0.0.0/0`. Keep the address out of Git and verify GKE's
+generated ingress firewall and access from the reviewer's computer after apply.
+If the address changes, update the private allowlist before the next review.
 The Argo Kustomize overlay sets `server.basehref` and `server.rootpath` to
 `/argo`; it leaves Argo TLS enabled. Grafana must set
 `GF_SERVER_ROOT_URL=https://<public-ip>/grafana/` and
@@ -40,7 +46,8 @@ kubectl -n fleet-gateway create secret tls fleet-gateway-tls `
   --cert .\gateway.crt --key .\gateway.key --dry-run=client -o yaml |
   kubectl apply -f -
 kubectl apply -k .\bootstrap\gcp\argo
-kubectl apply -k .\bootstrap\gcp\gateway
+# Render the gateway with the private reviewer /32 patch, then apply that render.
+kubectl apply -f <PRIVATE_GATEWAY_RENDER>
 kubectl -n fleet-gateway get service fleet-gateway -o wide
 kubectl -n fleet-gateway rollout status deployment/fleet-gateway --timeout=180s
 ```

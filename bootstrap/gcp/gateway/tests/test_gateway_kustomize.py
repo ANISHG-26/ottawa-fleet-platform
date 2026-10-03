@@ -56,6 +56,10 @@ class GatewayKustomizeContractTests(unittest.TestCase):
         self.assertIn("server.basehref: /argo", self.argo)
         self.assertNotIn("server.insecure: \"true\"", self.argo)
 
+    def test_public_ingress_is_closed_until_private_reviewer_allowlist_is_supplied(self):
+        self.assertIn("loadBalancerSourceRanges:\n  - 0.0.0.0/32", self.gateway)
+        self.assertNotIn("0.0.0.0/0", self.gateway)
+
 
 if __name__ == "__main__":
     unittest.main()

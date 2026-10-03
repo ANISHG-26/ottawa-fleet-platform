@@ -1,0 +1,96 @@
+otelcol.receiver.otlp "local" {
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces = [otelcol.processor.batch.local.input]
+  }
+}
+
+otelcol.processor.batch "local" {
+  timeout = "1s"
+  send_batch_size = 256
+  send_batch_max_size = 512
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+    sending_queue {
+      enabled = true
+      num_consumers = 2
+      queue_size = 512
+    }
+    retry_on_failure {
+      enabled = true
+      max_elapsed_time = "10s"
+    }
+  }
+}
+
+prometheus.scrape "ottawa_fleet" {
+  scrape_interval = "15s"
+  scrape_timeout = "5s"
+  targets = [
+    {__address__ = "fleet-api:8080", job = "ottawa-fleet", service = "fleet-api"},
+    {__address__ = "ride-api:8081", job = "ottawa-fleet", service = "ride-api"},
+    {__address__ = "assignment-worker:8082", job = "ottawa-fleet", service = "assignment-worker"},
+  ]
+  forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
+prometheus.remote_write "mimir" {
+  endpoint {
+    url = "http://mimir:9009/api/v1/push"
+    headers = {"X-Scope-OrgID" = "anonymous"}
+    remote_timeout = "5s"
+    queue_config {
+      capacity = 2000
+      max_shards = 2
+      max_samples_per_send = 500
+      batch_send_deadline = "5s"
+    }
+  }
+}
+
+local.file_match "fleet_logs" {
+  path_targets = [
+    {__path__ = "/var/log/fleet/fleet-api.jsonl", job = "ottawa-fleet", service = "fleet-api"},
+    {__path__ = "/var/log/fleet/ride-api.jsonl", job = "ottawa-fleet", service = "ride-api"},
+    {__path__ = "/var/log/fleet/assignment-worker.jsonl", job = "ottawa-fleet", service = "assignment-worker"},
+  ]
+  sync_period = "5s"
+}
+
+loki.source.file "fleet_logs" {
+  targets = local.file_match.fleet_logs.targets
+  forward_to = [loki.process.fleet_logs.receiver]
+}
+
+loki.process "fleet_logs" {
+  stage.json {
+    expressions = {
+      level = "level",
+      service = "service",
+    }
+  }
+  stage.labels {
+    values = {
+      level = "",
+      service = "",
+    }
+  }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

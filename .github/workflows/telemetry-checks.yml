@@ -1,0 +1,123 @@
+name: telemetry-checks
+
+on:
+  pull_request:
+    paths:
+      - "observability/**"
+      - "docs/runbooks/telemetry.md"
+      - ".github/workflows/telemetry-checks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "observability/**"
+      - "docs/runbooks/telemetry.md"
+      - ".github/workflows/telemetry-checks.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telemetry-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-pinned-configs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GRAFANA_ADMIN_PASSWORD: ci-only-not-a-secret
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate Compose model
+        run: docker compose -f observability/compose.telemetry.yaml config --quiet
+      - name: Pull pinned validators
+        run: |
+          docker pull busybox:1.37.0
+          docker pull grafana/loki:3.7.0
+          docker pull grafana/tempo:3.0.3
+          docker pull grafana/mimir:3.2.1
+          docker pull grafana/alloy:v1.20.1
+          docker pull grafana/grafana:13.2.2
+      - name: Verify named-volume ownership for backend runtime user
+        run: |
+          trap 'docker volume rm telemetry-loki-ownership-check telemetry-tempo-ownership-check telemetry-mimir-ownership-check >/dev/null 2>&1 || true' EXIT
+          docker volume create telemetry-loki-ownership-check
+          docker volume create telemetry-tempo-ownership-check
+          docker volume create telemetry-mimir-ownership-check
+          docker run --rm --user 0:0 \
+            -v telemetry-loki-ownership-check:/data \
+            -v telemetry-tempo-ownership-check:/tempo \
+            -v telemetry-mimir-ownership-check:/mimir \
+            busybox:1.37.0 sh -ec 'chown 10001:10001 /data /tempo /mimir && chmod 0750 /data /tempo /mimir'
+          docker run --rm --user 10001:10001 -v telemetry-loki-ownership-check:/data busybox:1.37.0 sh -ec 'touch /data/.ownership-check && rm /data/.ownership-check'
+          docker run --rm --user 10001:10001 -v telemetry-tempo-ownership-check:/data busybox:1.37.0 sh -ec 'touch /data/.ownership-check && rm /data/.ownership-check'
+          docker run --rm --user 10001:10001 -v telemetry-mimir-ownership-check:/data busybox:1.37.0 sh -ec 'touch /data/.ownership-check && rm /data/.ownership-check'
+      - name: Validate Loki configuration
+        run: >-
+          docker run --rm
+          --mount type=bind,source="$GITHUB_WORKSPACE/observability/loki",target=/config,readonly
+          grafana/loki:3.7.0
+          -config.file=/config/config.yaml -verify-config=true
+      - name: Validate Tempo 3 configuration
+        run: >-
+          docker run --rm
+          --mount type=bind,source="$GITHUB_WORKSPACE/observability/tempo",target=/config,readonly
+          grafana/tempo:3.0.3
+          -config.file=/config/config.yaml -config.verify=true
+      - name: Validate Mimir configuration
+        run: >-
+          docker run --rm
+          --mount type=bind,source="$GITHUB_WORKSPACE/observability/mimir",target=/config,readonly
+          grafana/mimir:3.2.1
+          -modules -config.file=/config/config.yaml
+      - name: Smoke-test Mimir startup and readiness
+        run: |
+          docker run -d --name mimir-config-check --memory=768m --cpus=1 \
+            -p 127.0.0.1:19009:9009 \
+            --mount type=bind,source="$GITHUB_WORKSPACE/observability/mimir",target=/config,readonly \
+            grafana/mimir:3.2.1 -config.file=/config/config.yaml
+          trap 'docker rm -f mimir-config-check >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:19009/ready >/dev/null; then
+              exit 0
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' mimir-config-check)" != "true" ]; then
+              docker logs mimir-config-check
+              exit 1
+            fi
+            sleep 1
+          done
+          docker logs mimir-config-check
+          exit 1
+      - name: Validate Alloy configuration
+        run: >-
+          docker run --rm
+          --mount type=bind,source="$GITHUB_WORKSPACE/observability/alloy",target=/config,readonly
+          grafana/alloy:v1.20.1
+          validate --stability.level=experimental /config/config.alloy
+      - name: Parse provisioned dashboard JSON
+        run: python -m json.tool observability/grafana/dashboards/ottawa-fleet.json > /dev/null
+      - name: Smoke-test Grafana provisioning
+        run: |
+          docker run -d --name grafana-config-check --memory=384m --cpus=0.5 \
+            -p 127.0.0.1:13000:3000 \
+            -e GF_SECURITY_ADMIN_PASSWORD="$GRAFANA_ADMIN_PASSWORD" \
+            -e GF_USERS_ALLOW_SIGN_UP=false \
+            --mount type=bind,source="$GITHUB_WORKSPACE/observability/grafana/provisioning",target=/etc/grafana/provisioning,readonly \
+            --mount type=bind,source="$GITHUB_WORKSPACE/observability/grafana/dashboards",target=/var/lib/grafana/dashboards,readonly \
+            grafana/grafana:13.2.2
+          trap 'docker rm -f grafana-config-check >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:13000/api/health >/dev/null; then
+              exit 0
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' grafana-config-check)" != "true" ]; then
+              docker logs grafana-config-check
+              exit 1
+            fi
+            sleep 1
+          done
+          docker logs grafana-config-check
+          exit 1

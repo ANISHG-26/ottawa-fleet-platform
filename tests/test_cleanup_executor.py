@@ -127,6 +127,26 @@ class CleanupExecutorTests(unittest.TestCase):
         self.assertTrue(any('instances' in args for args in seen))
         self.assertTrue(all('--project' in args for args in seen))
 
+    def test_subnet_absence_uses_supported_networks_subnets_group(self):
+        cluster = 'fleet-lab-r12345678901'
+        seen = []
+        def command(args):
+            seen.append(args)
+            if 'describe' in args:
+                raise subprocess.CalledProcessError(1, args, stderr='NOT_FOUND')
+            if args[:3] == ['gcloud', 'compute', 'subnetworks']:
+                raise subprocess.CalledProcessError(
+                    2, args, stderr='Invalid choice: subnetwork')
+            return '[]'
+
+        cleanup.verify_absent('synthetic-project', cluster, 'us-central1-a', command)
+        subnet_calls = [args for args in seen if 'subnets' in args or 'subnetworks' in args]
+        self.assertEqual(len(subnet_calls), 1)
+        self.assertEqual(subnet_calls[0][:5],
+                         ['gcloud', 'compute', 'networks', 'subnets', 'list'])
+        self.assertIn('--project', subnet_calls[0])
+        self.assertIn('name~^fleet-lab-r12345678901-subnet$', subnet_calls[0])
+
     def test_permission_denied_is_not_absence(self):
         def command(args):
             raise subprocess.CalledProcessError(1, args, stderr='PERMISSION_DENIED')

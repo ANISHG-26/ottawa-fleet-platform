@@ -237,10 +237,13 @@ def verify_absent(project: str, cluster: str, zone: str, command=run,
            disk.get("labels", {}).get("goog-k8s-cluster-location") == zone
            for disk in disks):
         raise RuntimeError("run-owned disks still exist")
-    for kind, pattern in (("disks", f"^(gke-{cluster}-|{cluster}-)"),
-                          ("forwarding-rules", f"^{cluster}-"),
-                          ("subnetworks", f"^{cluster}-subnet$")):
-        listing = command(["gcloud", "compute", kind, "list", "--project", project,
+    inventory_commands = (
+        (["gcloud", "compute", "disks", "list"], f"^(gke-{cluster}-|{cluster}-)", "disks"),
+        (["gcloud", "compute", "forwarding-rules", "list"], f"^{cluster}-", "forwarding-rules"),
+        (["gcloud", "compute", "networks", "subnets", "list"], f"^{cluster}-subnet$", "subnetworks"),
+    )
+    for command_prefix, pattern, kind in inventory_commands:
+        listing = command(command_prefix + ["--project", project,
                            "--filter", f"name~{pattern}", "--format=json"])
         if json.loads(listing or "[]"):
             raise RuntimeError(f"run-owned {kind} still exist")

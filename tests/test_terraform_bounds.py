@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import unittest
@@ -13,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TERRAFORM_ROOT = ROOT / "terraform" / "lab"
 TERRAFORM = os.environ.get("TERRAFORM_BIN") or shutil.which("terraform")
 GOOGLE_PROVIDER_DIR = TERRAFORM_ROOT / ".terraform" / "providers" / "registry.terraform.io" / "hashicorp" / "google"
+AUTOMATION_ROOT = ROOT / "terraform" / "automation"
 
 
 @unittest.skipUnless(TERRAFORM, "Terraform CLI is required for the offline mock-provider tests")
@@ -35,6 +37,52 @@ class TerraformBoundsTests(unittest.TestCase):
             0,
             msg=f"terraform test failed\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}",
         )
+
+
+class TerraformAutomationIamBoundsTests(unittest.TestCase):
+    def test_function_builder_copy_access_is_bucket_and_prefix_scoped_before_function(self) -> None:
+        config = (AUTOMATION_ROOT / "main.tf").read_text(encoding="utf-8")
+        grant_match = re.search(
+            r'resource "google_project_iam_member" "function_builder_copied_source_read"\s*\{(?P<body>.*?)\n\}',
+            config,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(grant_match, "missing bucket-scoped Cloud Functions source-copy grant")
+        grant = grant_match.group("body")
+
+        self.assertIn('project = var.project_id', grant)
+        self.assertIn('role    = "roles/storage.objectViewer"', grant)
+        self.assertIn(
+            'function_build_source_bucket = "gcf-v2-sources-${var.project_number}-${var.cloud_build_location}"',
+            config,
+        )
+        self.assertIn(
+            'expression  = "resource.name.startsWith(\\"projects/_/buckets/${local.function_build_source_bucket}/objects/${local.function_name}/\\")"',
+            grant,
+        )
+        self.assertIn('depends_on = [google_project_service.automation]', grant)
+        project_bindings = re.findall(
+            r'resource "google_project_iam_member"\s+"[^\"]+"\s*\{(?P<body>.*?)\n\}',
+            config,
+            re.DOTALL,
+        )
+        storage_viewer_bindings = [
+            body for body in project_bindings if 'role    = "roles/storage.objectViewer"' in body
+        ]
+        self.assertEqual(len(storage_viewer_bindings), 1)
+        self.assertIn(
+            'expression  = "resource.name.startsWith(\\"projects/_/buckets/${local.function_build_source_bucket}/objects/${local.function_name}/\\")"',
+            storage_viewer_bindings[0],
+        )
+
+        function_match = re.search(
+            r'resource "google_cloudfunctions2_function" "shutdown"\s*\{(?P<body>.*?)\n\}',
+            config,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(function_match, "missing shutdown function resource")
+        function = function_match.group("body")
+        self.assertIn("google_project_iam_member.function_builder_copied_source_read", function)
 
 
 if __name__ == "__main__":

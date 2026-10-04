@@ -52,7 +52,7 @@ spec:
             - {name: http, containerPort: 3000}
           resources:
             requests: {cpu: 50m, memory: 192Mi}
-            limits: {cpu: 200m, memory: 256Mi}
+            limits: {cpu: 200m, memory: 512Mi}
           readinessProbe:
             httpGet: {path: /grafana/api/health, port: http}
             initialDelaySeconds: 10

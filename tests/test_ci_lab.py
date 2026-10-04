@@ -125,12 +125,13 @@ class CiLabContractTests(unittest.TestCase):
                 result = ci_lab.create_source_archive(
                     source_revision="a" * 40, output_path=target,
                     repo_root=Path(__file__).resolve().parents[1],
-                    paths=("terraform/lab", "scripts/lab_cleanup.py"),
+                    paths=("terraform/lab", "scripts/lab_cleanup.py", "scripts/private_diagnostics.py"),
                 )
             self.assertEqual(result, target.resolve())
             with tarfile.open(result, mode="r:gz") as source:
                 self.assertEqual(source.getnames(), ["terraform/lab/main.tf"])
             self.assertIn("--format=tar.gz", run.call_args.args[0])
+            self.assertIn("scripts/private_diagnostics.py", run.call_args.args[0])
             with self.assertRaises(ValueError):
                 ci_lab.create_source_archive(source_revision="a" * 40, output_path=target,
                                              repo_root=Path(__file__).resolve().parents[1],

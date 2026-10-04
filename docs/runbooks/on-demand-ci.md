@@ -35,6 +35,8 @@ Main-only federation does not establish a human approval gate. Inspect the live 
 
 The first workflow is infrastructure and Argo bootstrap acceptance. It does not yet deploy the complete application/monitoring release or prove end-to-end CD. Add reviewed immutable release inputs and application/telemetry checks before making that claim. Keep any UI ingress restricted to the private reviewer `/32`.
 
+The instance owns the disposable SQL database and user. Their provider deletion policy is `ABANDON`: Terraform removes those child entries from state and then deletes the instance, which removes its databases and users. This avoids separate database/user drops being blocked by active connections or table ownership. Cleanup still fails if the instance survives; abandoning the child entries does not establish successful teardown.
+
 ## Evidence required before activation is accepted
 
 Record the GitHub run, source SHA, exact state prefix, registered task deadline, function/build identities, GKE/SQL provisioning, bootstrap health, actual cleanup completion and residual-resource inventory. Test early delivery of the exact task as a shortened-expiry exercise without changing the production two-hour rule; repeat delivery must be harmless. Verify the manual lab remains up and its state remains untouched. Do not infer cleanup from an empty console billing chart or an accepted task alone.

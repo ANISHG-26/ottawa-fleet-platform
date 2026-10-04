@@ -286,7 +286,10 @@ run "accepts_reviewed_private_disposable_cloudsql" {
       !google_sql_database_instance.lab[0].settings[0].ip_configuration[0].ipv4_enabled &&
       google_sql_database_instance.lab[0].settings[0].ip_configuration[0].ssl_mode == "ENCRYPTED_ONLY" &&
       !google_sql_database_instance.lab[0].settings[0].backup_configuration[0].enabled &&
+      google_sql_database.lab[0].deletion_policy == "ABANDON" &&
+      google_sql_user.lab[0].deletion_policy == "ABANDON" &&
       !google_sql_database_instance.lab[0].deletion_protection &&
+      !google_sql_database_instance.lab[0].settings[0].deletion_protection_enabled &&
       google_sql_user.lab[0].password == var.database_password
     )
     error_message = "Cloud SQL must match the approved bounded PostgreSQL plan and stay private, encrypted, fixed-size, and disposable."

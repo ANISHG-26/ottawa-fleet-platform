@@ -266,6 +266,17 @@ class ShutdownTests(unittest.TestCase):
         self.assertEqual((status, body["state"]), (200, "complete"))
         self.assertEqual(backend.released, [RUN_ID])
 
+    def test_cloud_build_normalized_dollar_escape_is_accepted(self):
+        backend = FakeBackend()
+        build = backend.build(f"lab-cleanup-{RUN_ID}", RUN_ID, "0",
+            f"gs://{backend.bucket}/{PREFIX}/request.json", f"gs://{backend.bucket}/{PREFIX}/terraform.tfvars.json",
+            f"gs://{backend.bucket}/{PREFIX}/backend.hcl", build_id="normalized-build", status="SUCCESS")
+        build["steps"][0]["args"][1] = build["steps"][0]["args"][1].replace("$$", "$")
+        backend.builds = [build]
+        body, status = shutdown.dispatch(RUN_ID, backend)
+        self.assertEqual((status, body["state"]), (200, "complete"))
+        self.assertEqual(backend.released, [RUN_ID])
+
     def test_empty_tag_listing_uses_exact_build_get_and_reconciles_success(self):
         backend = FakeBackend()
         build_name = "projects/fleet-lab-project/locations/northamerica-northeast1/builds/abc123"
@@ -297,6 +308,20 @@ class ShutdownTests(unittest.TestCase):
                 self.assertEqual(status, 500)
                 self.assertEqual(backend.released, [])
                 self.assertEqual(backend.created, [])
+
+    def test_unreviewed_step_execution_fields_fail_closed(self):
+        for key, value in (("dir", "/tmp/attacker"), ("volumes", [{"name": "x", "path": "/tmp"}]),
+                           ("secretEnv", ["UNREVIEWED_SECRET"]), ("waitFor", ["other-step"])):
+            backend = FakeBackend()
+            candidate = backend.build(f"lab-cleanup-{RUN_ID}", RUN_ID, "0",
+                f"gs://{backend.bucket}/{PREFIX}/request.json", f"gs://{backend.bucket}/{PREFIX}/terraform.tfvars.json",
+                f"gs://{backend.bucket}/{PREFIX}/backend.hcl", status="SUCCESS")
+            candidate["steps"][0][key] = value
+            backend.builds = [candidate]
+            with self.subTest(field=key):
+                _, status = shutdown.dispatch(RUN_ID, backend)
+                self.assertEqual(status, 500)
+                self.assertEqual(backend.released, [])
 
     def test_malformed_build_listing_fails_closed(self):
         backend = FakeBackend()

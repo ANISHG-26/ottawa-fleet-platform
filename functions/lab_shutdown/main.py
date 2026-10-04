@@ -177,13 +177,28 @@ class GoogleBackend:
             raise RuntimeError("Cloud Build cleanup service account does not match configuration")
         actual_steps = build.get("steps")
         expected_steps = expected["steps"]
+        response_only_step_fields = {"status", "exitCode", "pullTiming", "timing"}
         if (not isinstance(actual_steps, list) or len(actual_steps) != len(expected_steps) or
-                any(not isinstance(actual, dict) or any(actual.get(key) != value for key, value in step.items())
+                any(not isinstance(actual, dict) or
+                    not set(actual).issubset(set(step) | response_only_step_fields) or
+                    any(actual.get(key) != value for key, value in step.items() if key != "args") or
+                    not self._args_match(step.get("args"), actual.get("args"))
                     for actual, step in zip(actual_steps, expected_steps))):
             raise RuntimeError("Cloud Build steps do not match the reviewed cleanup command")
         normalized = dict(build)
         normalized["name"] = f"projects/{self.project}/locations/{self.location}/builds/{build_id}"
         return normalized
+
+    @staticmethod
+    def _args_match(expected: object, actual: object) -> bool:
+        if expected == actual:
+            return True
+        # Cloud Build resolves $$ escapes in the returned Build resource. Accept only
+        # that documented normalization of the reviewed args, never a changed command.
+        if not isinstance(expected, list) or not isinstance(actual, list):
+            return False
+        escaped = [value.replace("$$", "$") if isinstance(value, str) else value for value in expected]
+        return actual == escaped
 
     def create_poll_task(self, run_id: str, attempt: int, delay: int = _POLL_SECONDS) -> None:
         parent = f"projects/{self.project}/locations/{self.env['TASKS_LOCATION']}/queues/{self.queue}"

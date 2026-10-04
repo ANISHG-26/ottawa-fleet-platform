@@ -75,8 +75,10 @@ run "reviewed_automation_is_private_and_bounded" {
       google_cloud_run_service_iam_member.task_invoker.role == "roles/run.invoker" &&
       contains(google_project_iam_custom_role.network_editor.permissions, "compute.subnetworks.delete") &&
       contains(google_project_iam_custom_role.network_editor.permissions, "compute.regionOperations.get") &&
+      contains(google_project_iam_custom_role.network_editor.permissions, "compute.networks.updatePolicy") &&
       !contains(google_project_iam_custom_role.network_editor.permissions, "compute.networks.create") &&
       !contains(google_project_iam_custom_role.network_editor.permissions, "compute.networks.delete") &&
+      !contains(google_project_iam_custom_role.network_editor.permissions, "compute.networks.setIamPolicy") &&
       contains(google_project_iam_custom_role.cleanup_inventory_reader.permissions, "compute.disks.list") &&
       contains(google_project_iam_custom_role.cleanup_inventory_reader.permissions, "compute.forwardingRules.list") &&
       google_service_account_iam_member.deploy_act_as_invoker.role == "roles/iam.serviceAccountUser" &&

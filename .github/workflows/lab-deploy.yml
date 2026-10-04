@@ -28,18 +28,24 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Mask private input fields before cloud authentication
+        run: python3 -m scripts.ci_log_masks
+        env:
+          LAB_TFVARS_JSON: ${{ secrets.LAB_TFVARS_JSON }}
+          GCP_WIF_PROVIDER: ${{ secrets.GCP_WIF_PROVIDER }}
+
       - name: Authenticate with short-lived workload identity
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
-          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
           create_credentials_file: true
           export_environment_variables: true
 
       - name: Install pinned Google Cloud CLI
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
         with:
-          project_id: ${{ vars.GCP_PROJECT_ID }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
           version: '587.0.0'
           install_components: 'gke-gcloud-auth-plugin,kubectl'
 
@@ -59,10 +65,10 @@ jobs:
       - name: Upload private run inputs, register expiry, then provision
         run: python3 -m scripts.ci_lab
         env:
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          LAB_STATE_BUCKET: ${{ vars.LAB_STATE_BUCKET }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          LAB_STATE_BUCKET: ${{ secrets.LAB_STATE_BUCKET }}
           LAB_TFVARS_JSON: ${{ secrets.LAB_TFVARS_JSON }}
-          LAB_SHUTDOWN_URL: ${{ vars.LAB_SHUTDOWN_URL }}
+          LAB_SHUTDOWN_URL: ${{ secrets.LAB_SHUTDOWN_URL }}
           LAB_TASK_QUEUE: ${{ vars.LAB_TASK_QUEUE }}
           LAB_TASK_LOCATION: ${{ vars.LAB_TASK_LOCATION }}
-          LAB_TASK_INVOKER_SERVICE_ACCOUNT: ${{ vars.LAB_TASK_INVOKER_SERVICE_ACCOUNT }}
+          LAB_TASK_INVOKER_SERVICE_ACCOUNT: ${{ secrets.LAB_TASK_INVOKER_SERVICE_ACCOUNT }}

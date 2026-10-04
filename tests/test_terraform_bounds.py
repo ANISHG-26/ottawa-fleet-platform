@@ -40,6 +40,13 @@ class TerraformBoundsTests(unittest.TestCase):
 
 
 class TerraformAutomationIamBoundsTests(unittest.TestCase):
+    def test_ephemeral_network_role_has_required_attachment_permission_without_vpc_creation(self) -> None:
+        config = (AUTOMATION_ROOT / "main.tf").read_text(encoding="utf-8")
+        role = re.search(r'resource "google_project_iam_custom_role" "network_editor"\s*\{(?P<body>.*?)\n\}', config, re.DOTALL).group('body')
+        self.assertIn('"compute.networks.updatePolicy"', role)
+        for permission in ('compute.networks.create', 'compute.networks.delete', 'compute.networks.setIamPolicy'):
+            self.assertNotIn('"' + permission + '"', role)
+
     def test_exact_immutable_oidc_subject_keeps_main_workflow_environment_boundary(self) -> None:
         config = (AUTOMATION_ROOT / "main.tf").read_text(encoding="utf-8")
         self.assertIn('repo:ANISHG-26@${var.github_repository_owner_id}/ottawa-fleet-platform@${var.github_repository_id}:environment:gcp-lab', config)

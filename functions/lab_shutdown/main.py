@@ -42,9 +42,9 @@ class GoogleBackend:
         self.function_url = env["FUNCTION_URL"].rstrip("/")
         self.cleanup_sa = env["CLEANUP_SERVICE_ACCOUNT"]
 
-    def _get(self, url: str, **kwargs: Any) -> dict:
+    def _get(self, url: str, *, allow_not_found: bool = True, **kwargs: Any) -> dict:
         response = self.http.get(url, timeout=30, **kwargs)
-        if response.status_code == 404:
+        if response.status_code == 404 and allow_not_found:
             return {}
         response.raise_for_status()
         return response.json()
@@ -77,16 +77,53 @@ class GoogleBackend:
 
     def list_builds(self, tag: str) -> list[dict]:
         url = f"https://cloudbuild.googleapis.com/v1/projects/{self.project}/locations/{self.location}/builds"
-        result = self._get(url, params={"filter": f"tags='{tag}'", "pageSize": 100})
-        return result.get("builds", [])
+        params = {"filter": f"tags={json.dumps(tag)}", "pageSize": 100}
+        builds: list[dict] = []
+        seen_tokens: set[str] = set()
+        while True:
+            result = self._get(url, allow_not_found=False, params=params)
+            if not isinstance(result, dict):
+                raise RuntimeError("Cloud Build returned a malformed build list")
+            page = result.get("builds", [])
+            if not isinstance(page, list) or any(not isinstance(build, dict) for build in page):
+                raise RuntimeError("Cloud Build returned a malformed build list")
+            builds.extend(page)
+            token = result.get("nextPageToken")
+            if not token:
+                return builds
+            if not isinstance(token, str) or token in seen_tokens or len(seen_tokens) >= 10:
+                raise RuntimeError("Cloud Build returned a malformed pagination token")
+            seen_tokens.add(token)
+            params["pageToken"] = token
 
     def get_build(self, name: str) -> dict:
+        match = re.fullmatch(r"projects/([^/]+)/locations/([^/]+)/builds/([A-Za-z0-9-]+)", name) if isinstance(name, str) else None
+        if (not match or match.group(1) not in self.project_aliases or
+                match.group(2) != self.location):
+            raise RuntimeError("stored cleanup build name is outside the configured project and location")
         return self._get(f"https://cloudbuild.googleapis.com/v1/{name}")
 
     def create_build(self, tag: str, run_id: str, source_generation: str,
                      request_uri: str, tfvars_uri: str, backend_uri: str) -> dict:
         parent = f"projects/{self.project}/locations/{self.location}"
-        config = {
+        config = self.cleanup_build_config(tag, run_id, source_generation,
+                                           request_uri, tfvars_uri, backend_uri)
+        operation = self._post(f"https://cloudbuild.googleapis.com/v1/{parent}/builds", config,
+                               params={"projectId": self.project})
+        if not isinstance(operation, dict) or operation.get("error"):
+            raise RuntimeError("Cloud Build rejected the cleanup build request")
+        metadata = operation.get("metadata")
+        build = metadata.get("build") if isinstance(metadata, dict) else None
+        if build is None and operation.get("done") is True:
+            build = operation.get("response")
+        if not isinstance(build, dict):
+            raise RuntimeError("Cloud Build create operation did not include its build resource")
+        return self.validate_build(build, tag, run_id, source_generation,
+                                   request_uri, tfvars_uri, backend_uri)
+
+    def cleanup_build_config(self, tag: str, run_id: str, source_generation: str,
+                             request_uri: str, tfvars_uri: str, backend_uri: str) -> dict:
+        return {
             "source": {"storageSource": {"bucket": self.bucket,
                 "object": f"gcp-lab/runs/{run_id}/source.tgz", "generation": source_generation}},
             "tags": [tag], "serviceAccount": f"projects/{self.project}/serviceAccounts/{self.cleanup_sa}",
@@ -102,16 +139,11 @@ class GoogleBackend:
                         f"EXPECTED_PROJECT={self.project}", f"EXPECTED_BUCKET={self.bucket}",
                         f"EXPECTED_RETAINED_NETWORK={self.retained_network_name}"]}],
         }
-        operation = self._post(f"https://cloudbuild.googleapis.com/v1/{parent}/builds", config,
-                               params={"projectId": self.project})
-        if not isinstance(operation, dict) or operation.get("error"):
-            raise RuntimeError("Cloud Build rejected the cleanup build request")
-        metadata = operation.get("metadata")
-        build = metadata.get("build") if isinstance(metadata, dict) else None
-        if build is None and operation.get("done") is True:
-            build = operation.get("response")
+
+    def validate_build(self, build: object, tag: str, run_id: str, source_generation: str,
+                       request_uri: str, tfvars_uri: str, backend_uri: str) -> dict:
         if not isinstance(build, dict):
-            raise RuntimeError("Cloud Build create operation did not include its build resource")
+            raise RuntimeError("Cloud Build returned a malformed build resource")
         name = build.get("name")
         build_id = build.get("id")
         project_id = build.get("projectId")
@@ -126,11 +158,47 @@ class GoogleBackend:
             raise RuntimeError("Cloud Build returned a build outside the configured project and location")
         if not isinstance(build.get("status"), str) or not build["status"]:
             raise RuntimeError("Cloud Build response omitted the build status")
-        if tag not in build.get("tags", []):
+        tags = build.get("tags")
+        if not isinstance(tags, list) or tag not in tags:
             raise RuntimeError("Cloud Build response did not confirm the run cleanup tag")
+        expected = self.cleanup_build_config(tag, run_id, source_generation,
+                                             request_uri, tfvars_uri, backend_uri)
+        storage_source = build.get("source", {}).get("storageSource") if isinstance(build.get("source"), dict) else None
+        expected_source = expected["source"]["storageSource"]
+        if not isinstance(storage_source, dict) or any(storage_source.get(key) != value
+                                                       for key, value in expected_source.items()):
+            raise RuntimeError("Cloud Build source does not match the exact run input generation")
+        expected_sa = expected["serviceAccount"]
+        actual_sa = build.get("serviceAccount")
+        sa_email = expected_sa.split("/serviceAccounts/", 1)[-1]
+        sa_match = re.fullmatch(r"projects/([^/]+)/serviceAccounts/([^/]+)", actual_sa) if isinstance(actual_sa, str) else None
+        if (not sa_match or sa_match.group(1) not in self.project_aliases or
+                sa_match.group(2) != sa_email):
+            raise RuntimeError("Cloud Build cleanup service account does not match configuration")
+        actual_steps = build.get("steps")
+        expected_steps = expected["steps"]
+        response_only_step_fields = {"status", "exitCode", "pullTiming", "timing"}
+        if (not isinstance(actual_steps, list) or len(actual_steps) != len(expected_steps) or
+                any(not isinstance(actual, dict) or
+                    not set(actual).issubset(set(step) | response_only_step_fields) or
+                    any(actual.get(key) != value for key, value in step.items() if key != "args") or
+                    not self._args_match(step.get("args"), actual.get("args"))
+                    for actual, step in zip(actual_steps, expected_steps))):
+            raise RuntimeError("Cloud Build steps do not match the reviewed cleanup command")
         normalized = dict(build)
         normalized["name"] = f"projects/{self.project}/locations/{self.location}/builds/{build_id}"
         return normalized
+
+    @staticmethod
+    def _args_match(expected: object, actual: object) -> bool:
+        if expected == actual:
+            return True
+        # Cloud Build resolves $$ escapes in the returned Build resource. Accept only
+        # that documented normalization of the reviewed args, never a changed command.
+        if not isinstance(expected, list) or not isinstance(actual, list):
+            return False
+        escaped = [value.replace("$$", "$") if isinstance(value, str) else value for value in expected]
+        return actual == escaped
 
     def create_poll_task(self, run_id: str, attempt: int, delay: int = _POLL_SECONDS) -> None:
         parent = f"projects/{self.project}/locations/{self.env['TASKS_LOCATION']}/queues/{self.queue}"
@@ -226,10 +294,20 @@ def dispatch(run_id: object, backend: Any, now: datetime | None = None) -> tuple
         else:
             marker, generation = {"run_id": run_id, "attempt": 0, "state": "new"}, None
         builds = backend.list_builds(tag)
+        if not isinstance(builds, list):
+            return {"error": "Cloud Build returned a malformed build list"}, 500
         if not builds and marker.get("build_name"):
             exact_build = backend.get_build(marker["build_name"])
             if exact_build:
                 builds = [exact_build]
+        request_uri = f"gs://{backend.bucket}/{prefix}/request.json"
+        tfvars_uri = f"gs://{backend.bucket}/{prefix}/terraform.tfvars.json"
+        backend_uri = f"gs://{backend.bucket}/{prefix}/backend.hcl"
+        try:
+            builds = [backend.validate_build(b, tag, run_id, src_obj[1],
+                       request_uri, tfvars_uri, backend_uri) for b in builds]
+        except (KeyError, TypeError, AttributeError, RuntimeError, ValueError):
+            return {"error": "Cloud Build reconciliation did not match this run's cleanup configuration"}, 500
         build = next((b for b in builds if b.get("status") not in _TERMINAL), None)
         if build is None:
             build = next((b for b in builds if b.get("status") == "SUCCESS"), None)
@@ -270,9 +348,7 @@ def dispatch(run_id: object, backend: Any, now: datetime | None = None) -> tuple
             continue
         try:
             build = backend.create_build(tag, run_id, src_obj[1],
-                f"gs://{backend.bucket}/{prefix}/request.json",
-                f"gs://{backend.bucket}/{prefix}/terraform.tfvars.json",
-                f"gs://{backend.bucket}/{prefix}/backend.hcl")
+                request_uri, tfvars_uri, backend_uri)
         except Exception:
             # Keep launch claim; next callback first reconciles by deterministic Cloud Build tag.
             backend.create_poll_task(run_id, attempt + 1)

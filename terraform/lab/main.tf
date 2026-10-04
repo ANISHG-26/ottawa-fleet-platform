@@ -295,6 +295,10 @@ resource "google_sql_database" "lab" {
   project  = var.project_id
   instance = google_sql_database_instance.lab[0].name
   name     = "fleet"
+
+  # Let the disposable instance deletion remove its children without first
+  # issuing separate database/table and user drops against active sessions.
+  deletion_policy = "ABANDON"
 }
 
 resource "google_sql_user" "lab" {
@@ -303,4 +307,6 @@ resource "google_sql_user" "lab" {
   instance = google_sql_database_instance.lab[0].name
   name     = "fleet"
   password = var.database_password
+
+  deletion_policy = "ABANDON"
 }

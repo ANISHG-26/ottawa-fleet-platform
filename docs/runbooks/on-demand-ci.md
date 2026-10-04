@@ -14,6 +14,16 @@ Fixed subnet ranges allow only one live CI lab in this VPC. A conditional-create
 
 Separate state does not establish complete IAM isolation: the initial deployment and cleanup identities have project-wide GKE/Cloud SQL administration, and subnet/router permissions are also project-wide. They can affect other project resources despite the reviewed code's exact selectors. Owner review must accept this authority or choose stronger isolation before activation. Storage object data permissions remain limited to CI run prefixes. Before function deployment, a conditional project IAM binding grants the function builder object-view access only to the `fleet-lab-shutdown/` copied-source prefix in the regional Cloud Run functions staging bucket; this can be installed before Google creates that bucket.
 
+## GitHub settings and log privacy
+
+Use the `gcp-lab` environment for all cloud settings. Keep ordinary queue/location configuration in Actions variables. Store `GCP_PROJECT_ID`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `LAB_STATE_BUCKET`, `LAB_SHUTDOWN_URL`, `LAB_TASK_INVOKER_SERVICE_ACCOUNT` and `LAB_TFVARS_JSON` as environment secrets so step headers and action inputs mask their values. Variables are configuration storage and are not automatically masked. Register masks for string fields extracted from the JSON input and the federation project number before cloud authentication; masking a JSON document alone does not reliably cover its individual fields. Never echo credentials or upload runner credential files.
+
+The custom network role includes `compute.networks.updatePolicy` to attach run subnets and routers to the retained VPC. It does not grant VPC creation, deletion or IAM-policy changes; this network attachment authority remains project-wide.
+
+For public repositories, standard GitHub-hosted runners are free. GitHub Free's private-repository allowance is 2,000 runner minutes/month and 500 MB artifact storage; the included cache allowance is 10 GB/repository. Environment secrets and deployment protection rules are available on Free for public repositories, while private environments require a paid plan. GitHub permits 100 environment secrets, each at most 48 KB. These allowances do not cover Google Cloud resources. Verify current [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions), [environment availability](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments) and [secret limits](https://docs.github.com/en/actions/reference/security/secrets) before changing repository visibility or runner type.
+
+Main-only federation does not establish a human approval gate. Inspect the live environment's required reviewers and bypass settings, and the branch's required check contexts, rather than assuming every CI check is enforced.
+
 ## Provision and expire
 
 1. Dispatch the main-only workflow in the reviewed `gcp-lab` environment. Authenticate through short-lived GitHub OIDC/WIF, restricted to the exact repository/owner identities, branch, workflow and environment. The subject uses GitHub's immutable `repo:OWNER@OWNER-ID/REPO@REPO-ID:environment:gcp-lab` format. Verify the active prefix with `gh api repos/ANISHG-26/ottawa-fleet-platform/actions/oidc/customization/sub` before activation; do not relax the condition to work around a format mismatch.
@@ -24,6 +34,8 @@ Separate state does not establish complete IAM isolation: the initial deployment
 6. Cleanup removes any exact gateway Service before cluster deletion, destroys only the run's Terraform state, and verifies owned resources are absent. Failure retains state and the lease for repair. Successful verification permits matching-generation lease release.
 
 The first workflow is infrastructure and Argo bootstrap acceptance. It does not yet deploy the complete application/monitoring release or prove end-to-end CD. Add reviewed immutable release inputs and application/telemetry checks before making that claim. Keep any UI ingress restricted to the private reviewer `/32`.
+
+The instance owns the disposable SQL database and user. Their provider deletion policy is `ABANDON`: Terraform removes those child entries from state and then deletes the instance, which removes its databases and users. This avoids separate database/user drops being blocked by active connections or table ownership. Cleanup still fails if the instance survives; abandoning the child entries does not establish successful teardown.
 
 ## Evidence required before activation is accepted
 

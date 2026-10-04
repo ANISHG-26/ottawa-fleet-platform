@@ -40,6 +40,14 @@ class TerraformBoundsTests(unittest.TestCase):
 
 
 class TerraformAutomationIamBoundsTests(unittest.TestCase):
+    def test_exact_immutable_oidc_subject_keeps_main_workflow_environment_boundary(self) -> None:
+        config = (AUTOMATION_ROOT / "main.tf").read_text(encoding="utf-8")
+        self.assertIn('repo:ANISHG-26@${var.github_repository_owner_id}/ottawa-fleet-platform@${var.github_repository_id}:environment:gcp-lab', config)
+        for claim in ('repository_id', 'repository_owner_id', 'repository', 'ref', 'workflow_ref', 'sub'):
+            self.assertIn('assertion.' + claim + ' ==', config)
+        self.assertIn("assertion.ref == 'refs/heads/main'", config)
+        self.assertIn('/.github/workflows/lab-deploy.yml@refs/heads/main', config)
+
     def test_function_builder_copy_access_is_bucket_and_prefix_scoped_before_function(self) -> None:
         config = (AUTOMATION_ROOT / "main.tf").read_text(encoding="utf-8")
         grant_match = re.search(

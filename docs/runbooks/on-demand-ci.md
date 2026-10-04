@@ -16,7 +16,7 @@ Separate state does not establish complete IAM isolation: the initial deployment
 
 ## Provision and expire
 
-1. Dispatch the main-only workflow in the reviewed `gcp-lab` environment. Authenticate through short-lived GitHub OIDC/WIF, restricted to the exact repository/owner identities, branch, workflow and environment.
+1. Dispatch the main-only workflow in the reviewed `gcp-lab` environment. Authenticate through short-lived GitHub OIDC/WIF, restricted to the exact repository/owner identities, branch, workflow and environment. The subject uses GitHub's immutable `repo:OWNER@OWNER-ID/REPO@REPO-ID:environment:gcp-lab` format. Verify the active prefix with `gh api repos/ANISHG-26/ottawa-fleet-platform/actions/oidc/customization/sub` before activation; do not relax the condition to work around a format mismatch.
 2. Derive the run ID and source SHA from GitHub and the deadline from the Actions run start, not the provisioning step's clock. Store immutable private run inputs and cleanup source in GCS. Acquire the run lease before mutations.
 3. Register an authenticated Cloud Task for exactly start plus two hours before Terraform apply. Failure to register prevents provisioning. On provisioning failure, request immediate delivery of that same task; its durable schedule is the independent backstop.
 4. Terraform initializes its unique GCS backend, plans/applies the reviewed one-node/private-SQL shape in the retained network, then bootstraps Argo using an exact DNS-endpoint kubeconfig outside the checkout.

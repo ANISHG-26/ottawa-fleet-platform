@@ -73,6 +73,10 @@ run "reviewed_automation_is_private_and_bounded" {
       google_cloudfunctions2_function.shutdown.service_config[0].environment_variables["EXPECTED_RETAINED_NETWORK"] == var.retained_network_name &&
       google_cloudfunctions2_function.shutdown.service_config[0].environment_variables["CLOUD_BUILD_LOCATION"] == "us-central1" &&
       google_cloud_run_service_iam_member.task_invoker.role == "roles/run.invoker" &&
+      contains(google_project_iam_custom_role.network_editor.permissions, "compute.instanceGroupManagers.list") &&
+      !contains(google_project_iam_custom_role.network_editor.permissions, "compute.instanceGroupManagers.create") &&
+      !contains(google_project_iam_custom_role.network_editor.permissions, "compute.instanceGroupManagers.update") &&
+      !contains(google_project_iam_custom_role.network_editor.permissions, "compute.instanceGroupManagers.delete") &&
       contains(google_project_iam_custom_role.network_editor.permissions, "compute.subnetworks.delete") &&
       contains(google_project_iam_custom_role.network_editor.permissions, "compute.regionOperations.get") &&
       contains(google_project_iam_custom_role.network_editor.permissions, "compute.networks.updatePolicy") &&

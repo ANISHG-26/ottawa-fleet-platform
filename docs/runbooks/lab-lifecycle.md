@@ -16,7 +16,20 @@ This is the operating procedure for an optional GCP lab. Local application and l
 
 The Terraform root creates one zonal GKE Standard cluster with one private `e2-standard-2` node, a 30 GiB standard boot disk, a DNS-only IAM-gated control-plane endpoint and Cloud NAT scoped to the lab subnet. The reviewed managed database option adds private Cloud SQL PostgreSQL and private services access. NAT is required for Argo's pinned GitHub chart source and public GHCR image pulls. The separately applied gateway Service creates one public HTTPS load balancer for application, Grafana and Argo paths. See [Terraform inputs and commands](../../terraform/README.md) and [sizing and cost](../lab-sizing-and-cost.md) for scope and assumptions.
 
-The node service account and versioned Terraform state bucket are persistent prerequisites managed outside this disposable root. Use a unique state prefix and cluster name for each run. The current manual deployment is held for human review; its automatic expiry is not active. When teardown is authorized, use its exact Terraform state. Future GitHub Actions runs need an independently durable two-hour expiry controller registered before provisioning; Workflows and Cloud Build are a proposed implementation, not deployed automation. Cloud SQL producer resources can delay private services access peering/VPC deletion for several days. Separate retained network foundation ownership/state before enabling repeated CI runs; do not report complete deletion while residual resources remain.
+The node service account and versioned Terraform state bucket are persistent
+prerequisites managed outside the disposable root. Use a unique state prefix
+and cluster name for each run. The manual review deployment has no active
+automatic expiry; when teardown is authorized, use its exact Terraform state.
+
+The merged [on-demand CI path](on-demand-ci.md) registers a Cloud Task before
+Terraform apply. An authenticated Cloud Run function launches Cloud Build for
+exact-run cleanup and verifies absence before releasing the active lease. Its
+live activation and expiry/teardown test remain pending under issue #26. CI uses
+separate retained network foundation state because Cloud SQL producer cleanup
+can delay peering/VPC deletion for days. Run teardown preserves that foundation
+and the retained credential containers; the manual lab remains outside CI run
+selectors. Do not report complete deletion while run-owned residual resources
+remain.
 
 ## Shutdown and teardown
 
@@ -24,7 +37,7 @@ Stopping or scaling down nodes is not equivalent to deleting a cluster. Persiste
 
 1. Disable Argo automated reconciliation, delete the exact application, and delete the lab namespace. Delete the exact gateway LoadBalancer Service while the cluster controller is still running, and verify its forwarding rule/address are removed. Wait for any PVCs and owned persistent disks to be removed before cluster teardown.
 2. Use the exact reviewed Terraform backend, state prefix and variable file to destroy the run. Do not use a broad project-wide delete, wildcard, or guessed name.
-3. Re-list resources in the project and zone. Verify the cluster, nodes, disks, external addresses, NAT/router, subnet and VPC owned by this run are absent. Retain unrelated/shared resources.
+3. Re-list resources in the project and zone. Verify the cluster, nodes, disks, external addresses, NAT/router and subnet owned by this run are absent. Verify VPC removal only when that VPC belongs to the disposable state; the CI foundation VPC is retained. Retain unrelated/shared resources.
 4. Record the post-delete inventory and console evidence. Check billing/cost reporting later as well; reporting can lag deletion, so an immediate cost change is not proof of success or failure.
 5. Record who verified teardown, when, any retained resource and its owner/deadline, and the next cost-report review date. Escalate discrepancies to the account owner; do not silently leave resources running.
 
@@ -40,7 +53,10 @@ gcloud container clusters delete <EXACT_CLUSTER_NAME> --project <PROJECT_ID> --l
 # Re-list and inspect each residual resource; delete only individually verified lab-owned names.
 ```
 
-The command sketch does not discover or remove residual resources. Complete the manual inventory-based checks above and preserve evidence. No scheduled shutdown or cleanup automation is implemented.
+The command sketch does not discover or remove residual resources. Complete the
+manual inventory-based checks above and preserve evidence. CI scheduling and
+cleanup code are implemented; the manual review lab has no scheduled expiry,
+and a live CI cleanup run has not yet demonstrated that automation.
 
 ## Completion evidence
 

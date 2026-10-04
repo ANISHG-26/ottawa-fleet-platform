@@ -1,6 +1,13 @@
 # Application-to-platform release contract
 
-Status: agreed ownership direction; artifacts remain unimplemented.
+Status as of October 3, 2026: application packaging and immutable publication
+are implemented. [Tag v0.1.0](https://github.com/ANISHG-26/ottawa-fleet-app/tree/v0.1.0)
+selects source commit `f485682ea78c19e17f4194b642f8522e16e77194`;
+[trusted build 37131621545](https://github.com/ANISHG-26/ottawa-fleet-app/actions/runs/37131621545)
+published six GHCR images and the Helm chart as an Actions artifact. This is a
+tagged build, with no GitHub Release record. Artifact publication and the manual
+review deployment do not establish repeatable promotion, drift, rollback or
+CI expiry/teardown acceptance.
 
 ## Ownership and local handoff
 
@@ -19,7 +26,11 @@ Platform validates a fresh clone and records workload, resource use, outage/back
 - If an autoscaler owns worker replicas, the chart can omit replica management and reconciliation respects that boundary. Backlog signals remain available independently of worker count when scale-to-zero is enabled.
 - Migration execution has one owner. Releases state whether older images can run on the new schema; an image rollback does not reverse an incompatible migration.
 
-Publish only from trusted events using scoped credentials. Untrusted PR checks have no publish/cloud credentials. Registry and version selection occurs in packaging tickets.
+Publish only from trusted events using scoped credentials. Untrusted PR checks
+have no publish/cloud credentials. The current build uses GHCR and chart version
+`0.1.0`; its chart package and image metadata are available from the trusted
+workflow's artifacts. Platform promotion can select the app-owned chart at the
+exact source commit rather than requiring a separately published chart registry.
 
 ## Promotion, rollback and acceptance
 
@@ -27,4 +38,11 @@ Application CI produces tested artifacts. A platform PR selects pinned chart/ima
 
 Rollback restores the previous compatible artifact set/configuration after checking database compatibility. Rerun smoke/recovery checks. KEDA and Istio policy changes have independent review and revert procedures.
 
-Phase 1 acceptance is local. Phase 2 needs actual chart/images and a disposable-cluster deployment with promotion, drift and rollback evidence. This contract is not a claim that releases exist.
+Phase 1 acceptance remains local. Phase 2 requires a disposable-cluster run with
+promotion, drift, compatible rollback and teardown evidence in addition to
+published artifacts. The first manual GCP deployment used the v0.1.0 artifact
+set; newer merged app fixes do not change that deployed build automatically.
+The CI workflow currently provisions infrastructure and bootstraps Argo; it
+does not yet reproduce the complete application/LGTM deployment. Follow the
+[on-demand CI runbook](runbooks/on-demand-ci.md) and keep these acceptance gates
+separate.

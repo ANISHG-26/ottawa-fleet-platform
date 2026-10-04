@@ -2,7 +2,20 @@
 
 The platform team's repository for operating a small mock Ottawa fleet application. Learning goals: application delivery, Kubernetes, GitOps, scaling, service traffic, observability and eventually AI-assisted operations.
 
-**Status: planning and documentation scaffold. No cluster, controller, Terraform module or AI service has been implemented or deployed.**
+**Status as of October 3, 2026:** local acceptance, immutable promotion,
+cluster bootstrap, bounded GCP infrastructure, LGTM telemetry and reviewer
+credential tooling are implemented. A manual GCP review run has exercised the
+application, Argo CD, Grafana and telemetry; its account-specific evidence stays
+private. The on-demand CI lifecycle is merged and passes offline checks, but
+live provisioning and independent expiry/teardown acceptance remain open under
+[issue #26](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/26).
+
+The application has a published image build and packaged chart from
+[tag v0.1.0](https://github.com/ANISHG-26/ottawa-fleet-app/tree/v0.1.0) and
+[trusted build 37131621545](https://github.com/ANISHG-26/ottawa-fleet-app/actions/runs/37131621545).
+Full local workload acceptance, repeatable promotion/drift/rollback and exact
+cloud teardown remain separate evidence gates. KEDA, Istio, Backstage and AI
+SRE are future work. See the [delivery status](docs/project-management.md#current-delivery-and-review).
 
 ## Two repositories, one program
 
@@ -23,28 +36,43 @@ Phase 1 builds and validates the application locally. Kubernetes/GitOps follow i
 - [Roadmap and exit criteria](docs/roadmap.md)
 - [Current ADR](docs/adr/0002-two-repository-local-first-platform.md)
 - [Lab lifecycle](docs/runbooks/lab-lifecycle.md)
+- [Local workload acceptance](docs/runbooks/local-acceptance.md)
+- [On-demand CI lab and expiry](docs/runbooks/on-demand-ci.md)
+- [Telemetry setup](docs/runbooks/telemetry.md)
+- [Reviewer credential lifecycle](docs/runbooks/lab-credentials.md)
+- [Tooling ownership and validation map](docs/tooling-map.md)
 - [Future AI boundary](docs/ai-stack.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## Layout
 
 ```text
-bootstrap/    # Future local cluster and controller bootstrap
-gitops/       # Future Argo applications, release pins and environment values
-controllers/  # Future KEDA, Istio, monitoring and Backstage configuration
-terraform/    # Future approved infrastructure modules/environments
-tests/        # Future platform acceptance and experiment checks
-scripts/      # Scaffold checks; future platform lifecycle commands
-docs/         # Architecture, ADRs, ownership, experiments and runbooks
-.github/      # Issue/PR templates and documentation CI
+bootstrap/     # kind plans, Argo bootstrap and GCP review gateway
+gitops/        # Argo AppProject and immutable promotion inputs
+observability/ # Local Compose and bounded Kubernetes LGTM configuration
+controllers/   # Boundaries for future KEDA, Istio and Backstage integrations
+terraform/     # Disposable lab, retained network, automation and access roots
+functions/     # Authenticated expiry dispatcher for exact CI run cleanup
+tests/         # Offline platform contracts and provider-mocked bounds checks
+scripts/       # Acceptance, promotion, bootstrap and CI/cleanup tooling
+docs/          # Architecture, ADRs, ownership, experiments and runbooks
+.github/       # Repository/runtime checks and main-only lab dispatch
 ```
 
-Operational directories currently contain boundary descriptions only. Application source and Helm templates live in the application repository.
+Application source, Docker/Compose packaging and Helm templates live in the
+application repository. Platform tooling and environment configuration live here.
 
-## Validate the scaffold
+## Validate locally
 
 ```sh
 python scripts/check_repository.py
+python -m unittest discover -s tests -v
 ```
 
-This checks required files, local Markdown links and JSON; it is not an application/deployment test. Keep private deliberations, account identifiers and credentials outside both public checkouts.
+The repository check validates required files, local Markdown links and JSON.
+The offline suite checks acceptance, release pins, bootstrap, expiry and cleanup
+contracts. Terraform tests need initialized providers and otherwise report an
+explicit skip. See [validation entrypoints](docs/tooling-map.md#validation-entrypoints)
+for the additional provider and runtime checks used by CI. Passing these checks
+does not prove a live rollout or teardown. Keep private deliberations, account
+identifiers and credentials outside both public checkouts.

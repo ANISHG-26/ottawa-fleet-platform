@@ -11,6 +11,81 @@ from scripts import cleanup_execute as cleanup
 
 
 class CleanupExecutorTests(unittest.TestCase):
+    def test_gateway_inventory_owns_only_forwarding_rule_for_observed_ip(self):
+        network_link = 'projects/synthetic-project/global/networks/retained'
+        rules = [
+            {'name': 'gateway-run-ip', 'selfLink': 'rules/gateway-run-ip',
+             'IPAddress': '203.0.113.12', 'network': network_link},
+            {'name': 'other-service-ip', 'selfLink': 'rules/other-service-ip',
+             'IPAddress': '203.0.113.99', 'network': network_link},
+        ]
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(cleanup.subprocess, 'run', side_effect=[
+                    subprocess.CompletedProcess(['gcloud', 'storage', 'cp'], 1, stdout='',
+                        stderr='The following URLs matched no objects or files:'),
+                    subprocess.CompletedProcess(['gcloud', 'storage', 'cp'], 0, stdout='', stderr='')]):
+            def command(args):
+                if 'networks' in args:
+                    return json.dumps({'selfLink': network_link})
+                return json.dumps(rules)
+            links = cleanup.save_gateway_inventory(
+                bucket='synthetic-bucket', prefix='gcp-lab/runs/12345678',
+                network='retained', project='synthetic-project', work=Path(directory),
+                command=command, gateway_ips={'203.0.113.12'})
+            self.assertEqual(links, {'rules/gateway-run-ip'})
+
+    def test_empty_gateway_ips_with_ambiguous_shared_network_rule_fails_closed(self):
+        network_link = 'projects/synthetic-project/global/networks/retained'
+        rules = [{'name': 'other-service-ip', 'selfLink': 'rules/other-service-ip',
+                  'IPAddress': '203.0.113.99', 'network': network_link}]
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(cleanup.subprocess, 'run', side_effect=[
+                    subprocess.CompletedProcess(['gcloud', 'storage', 'cp'], 1, stdout='',
+                        stderr='The following URLs matched no objects or files:'),
+                    subprocess.CompletedProcess(['gcloud', 'storage', 'cp'], 0, stdout='', stderr='')]):
+            def command(args):
+                if 'networks' in args:
+                    return json.dumps({'selfLink': network_link})
+                return json.dumps(rules)
+            with self.assertRaisesRegex(RuntimeError, 'cannot identify gateway forwarding rules'):
+                cleanup.save_gateway_inventory(
+                    bucket='synthetic-bucket', prefix='gcp-lab/runs/12345678',
+                    network='retained', project='synthetic-project', work=Path(directory),
+                    command=command, gateway_ips=set())
+            self.assertFalse((Path(directory) / 'runowned-resources.json').exists())
+
+    def test_gcloud_587_missing_inventory_message_is_treated_as_absent(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(cleanup.subprocess, 'run', side_effect=[
+                    subprocess.CompletedProcess(['gcloud', 'storage', 'cp'], 1, stdout='',
+                        stderr='The following URLs matched no objects or files:\n'),
+                    subprocess.CompletedProcess(['gcloud', 'storage', 'cp'], 0, stdout='', stderr='')]):
+            def command(args):
+                if 'networks' in args:
+                    return '{"selfLink":"projects/synthetic-project/global/networks/retained"}'
+                return '[]'
+            links = cleanup.save_gateway_inventory(
+                bucket='synthetic-bucket', prefix='gcp-lab/runs/12345678',
+                network='retained', project='synthetic-project', work=Path(directory),
+                command=command)
+            self.assertEqual(links, set())
+            self.assertTrue((Path(directory) / 'runowned-resources.json').exists())
+
+    def test_permission_denied_reading_inventory_is_not_treated_as_absent(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(cleanup.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                    ['gcloud', 'storage', 'cp'], 1, stdout='', stderr='PERMISSION_DENIED: 403')):
+            command_calls = []
+            def command(args):
+                command_calls.append(args)
+                return '[]'
+            with self.assertRaisesRegex(RuntimeError, 'could not read prior run-owned resource inventory'):
+                cleanup.save_gateway_inventory(
+                    bucket='synthetic-bucket', prefix='gcp-lab/runs/12345678',
+                    network='retained', project='synthetic-project', work=Path(directory),
+                    command=command)
+            self.assertEqual(command_calls, [])
+
     def test_labeled_disk_with_short_generated_name_blocks_completion(self):
         cluster = 'fleet-lab-r12345678901'
         def command(args):

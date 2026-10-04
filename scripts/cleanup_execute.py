@@ -49,7 +49,7 @@ def save_gateway_inventory(*, bucket: str, prefix: str, network: str, project: s
         if inventory.get("retained_network") != network:
             raise RuntimeError("run-owned resource inventory targets a different retained network")
         return {item["selfLink"] for item in inventory.get("gateway_forwarding_rules", [])}
-    missing_markers = ("No URLs matched", "NotFound", "404", "does not exist")
+    missing_markers = ("No URLs matched", "matched no objects or files", "NotFound", "404", "does not exist")
     if not any(marker.lower() in ((probe.stderr or "") + (probe.stdout or "")).lower()
                for marker in missing_markers):
         raise RuntimeError("could not read prior run-owned resource inventory")
@@ -59,8 +59,10 @@ def save_gateway_inventory(*, bucket: str, prefix: str, network: str, project: s
     network_link = network_obj.get("selfLink", f"projects/{project}/global/networks/{network}")
     rules = json.loads(command(["gcloud", "compute", "forwarding-rules", "list", "--project", project,
                                 "--format=json"]) or "[]")
+    if not ips and any(rule.get("network") == network_link for rule in rules):
+        raise RuntimeError("cannot identify gateway forwarding rules without exact gateway IPs")
     owned = [{key: rule[key] for key in ("name", "selfLink", "IPAddress", "backendService") if key in rule}
-             for rule in rules if rule.get("IPAddress") in ips or rule.get("network") == network_link]
+             for rule in rules if rule.get("IPAddress") in ips]
     inventory = {"retained_network": network, "gateway_forwarding_rules": owned}
     path.write_text(json.dumps(inventory, sort_keys=True) + "\n", encoding="utf-8")
     upload = subprocess.run(["gcloud", "storage", "cp", "--if-generation-match=0", str(path), uri],
@@ -159,6 +161,7 @@ def main() -> int:
         work = Path(temp)
         req_path, vars_path, backend_path = (work / name for name in
             ("request.json", "terraform.tfvars.json", "backend.hcl"))
+        print("[cleanup] stage=inputs", file=sys.stderr, flush=True)
         download_private(args.request_uri, req_path)
         download_private(args.tfvars_uri, vars_path)
         download_private(args.backend_uri, backend_path)
@@ -173,11 +176,14 @@ def main() -> int:
                 backend_path.read_text() != f'bucket = "{bucket}"\nprefix = "{prefix}"\n'):
             raise ValueError("private Terraform inputs do not match the exact CI run")
         root = Path(__file__).resolve().parents[1] / "terraform" / "lab"
+        print("[cleanup] stage=terraform-install", file=sys.stderr, flush=True)
         terraform = install_terraform(work)
         env = dict(os.environ, TF_IN_AUTOMATION="1", TF_INPUT="0")
+        print("[cleanup] stage=terraform-init", file=sys.stderr, flush=True)
         run([str(terraform), "init", "-input=false", f"-backend-config={backend_path}"], cwd=root, env=env)
         # Remove the run's public gateway Service first so its external load balancer
         # begins deletion while the cluster and its network remain available.
+        print("[cleanup] stage=gateway-cleanup", file=sys.stderr, flush=True)
         try:
             cluster_description = json.loads(run(["gcloud", "container", "clusters", "describe",
                 request["cluster_name"], "--project", project, "--zone", tfvars["zone"], "--format=json"]))
@@ -195,8 +201,10 @@ def main() -> int:
                     network=retained_network, project=project, work=work, gateway_ips=ips)
             delete_gateway_service(cluster_description, before_delete=persist_gateway_inventory)
             gateway_rule_links = inventory["links"]
+        print("[cleanup] stage=terraform-destroy", file=sys.stderr, flush=True)
         run([str(terraform), "destroy", "-auto-approve", "-input=false",
              f"-var-file={vars_path}"], cwd=root, env=env)
+        print("[cleanup] stage=verify-absent", file=sys.stderr, flush=True)
         verify_absent(project, request["cluster_name"], tfvars["zone"], run, gateway_rule_links)
     return 0
 

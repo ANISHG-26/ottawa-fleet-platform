@@ -137,11 +137,12 @@ resource "google_project_iam_custom_role" "network_editor" {
   project     = var.project_id
   role_id     = "fleetLabEphemeralNetworkEditor"
   title       = "Fleet lab ephemeral subnet and NAT editor"
-  description = "Can manage run-scoped subnets, routers and Cloud NAT but cannot create/delete VPCs, PSA ranges, IAM or billing resources."
+  description = "Can manage run-scoped subnets, routers and Cloud NAT and attach them to VPCs, but cannot create/delete VPCs, PSA ranges, IAM or billing resources."
   stage       = "GA"
   permissions = [
     "compute.networks.get",
     "compute.networks.use",
+    "compute.networks.updatePolicy",
     "compute.subnetworks.create",
     "compute.subnetworks.delete",
     "compute.subnetworks.get",

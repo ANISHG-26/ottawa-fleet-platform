@@ -86,6 +86,28 @@ Cloud feasibility, Kubernetes, Helm publication, KEDA, Istio, Backstage and AI d
 | Platform | [Plan the handoff to a separate self-hosted AI infrastructure project](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/9) | experiment | [ottawa-fleet-platform#6](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/6) |
 | Platform | [Assess GPU feasibility for the separate AI infrastructure project](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/10) | experiment | [ottawa-fleet-platform#9](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/9) |
 
-## Review handoff
+## Current delivery and review
 
-Review platform foundation PR #11 and the application scaffold PR together. Both contain documentation/scaffolding only. Merge requires human authorization; the first Phase 1 implementation is application issue #1.
+Status checked against merged source and workflow history on October 3, 2026.
+The ticket map above describes outcome dependencies; merged implementation and
+accepted operating evidence are separate gates.
+
+| Area | Delivered source/evidence | Remaining acceptance |
+|---|---|---|
+| Application | Runtime/UI/Compose/Helm and bounded request handling are merged; [PR #23](https://github.com/ANISHG-26/ottawa-fleet-app/pull/23) fixes disposable PostgreSQL initialization. [Tag v0.1.0](https://github.com/ANISHG-26/ottawa-fleet-app/tree/v0.1.0) has a successful trusted image/chart build. | Full local workload evidence under app #4/#9 and platform #12; installed chart/release criteria under app #11/#12. The tag predates the latest fixes. |
+| Local platform | [PR #21](https://github.com/ANISHG-26/ottawa-fleet-platform/pull/21), [PR #22](https://github.com/ANISHG-26/ottawa-fleet-platform/pull/22) and [PR #24](https://github.com/ANISHG-26/ottawa-fleet-platform/pull/24) deliver bootstrap/promotion, LGTM and stricter acceptance validation. | Fresh local measurement, drift correction, compatible rollback and cleanup remain measured outcomes. |
+| Manual GCP review lab | [PR #25](https://github.com/ANISHG-26/ottawa-fleet-platform/pull/25) delivers bounded GKE/private SQL, Argo, gateway and monitoring configuration. The manual run exercised UI/ride and telemetry paths; account-specific evidence stays private. | Exact teardown and repeatable rollout/recovery evidence remain under #15/#7/#14. A held manual lab has no active automatic expiry. |
+| On-demand CI lifecycle | [PR #27](https://github.com/ANISHG-26/ottawa-fleet-platform/pull/27) is merged. Main checks pass for the Terraform roots, function startup and cleanup image. | [#26](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/26) needs reviewed resource/IAM activation, a live dispatch, early/duplicate expiry and verified absence/lease release. No provisioning workflow run existed at this status check. Full app/LGTM CD is a later slice. |
+| Reviewer access | [PR #30](https://github.com/ANISHG-26/ottawa-fleet-platform/pull/30) is merged; the existing reviewer credentials were migrated and authenticated privately. | [#29](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/29) remains its acceptance tracker. Future CI retrieval needs a separately reviewed accessor/input change. |
+
+Use [local acceptance](runbooks/local-acceptance.md), [lab lifecycle](runbooks/lab-lifecycle.md),
+[CI expiry](runbooks/on-demand-ci.md), [telemetry](runbooks/telemetry.md) and
+[reviewer credentials](runbooks/lab-credentials.md) for the applicable operator
+path. The [tooling map](tooling-map.md) records callers and checks for the
+maintenance backlog [#28](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/28).
+Documentation hygiene is tracked separately in [#31](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/31).
+
+Only claim a new active implementation slice when its blockers and validation
+are understood. Existing in-review outcome trackers retain their evidence gates;
+merged preparation alone does not justify closing them. PR merges remain a
+human decision.

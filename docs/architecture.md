@@ -20,7 +20,7 @@ Operator story: during a Lansdowne surge, view synthetic availability, submit ri
 
 The [release contract](application-release-contract.md) is the shared handoff. One resource has one managing owner. Platform references app artifacts rather than copying Helm templates. The app never installs cluster controllers.
 
-## Planned local workload
+## Application workload
 
 ```mermaid
 flowchart LR
@@ -35,11 +35,22 @@ flowchart LR
 
 Jobs and inventory may share one PostgreSQL instance for the lab; tables/migrations have explicit service ownership. The worker uses the documented job database contract. Other cross-service business calls use HTTP; the UI never accesses storage directly.
 
-Use one Go module in the app's `services/`, with separate commands for APIs, worker and scenario runner. Share packages only where semantics are shared. UI code lives in `web/`; its minimal framework is selected in the bounded UI ticket. No service or framework scaffold exists yet.
+The app uses one Go module in `services/`, with separate commands for APIs,
+worker and scenario runner, and a TypeScript operator UI in `web/`. These
+components, migrations, contracts and Docker/Compose packaging are merged.
+See the [application architecture](https://github.com/ANISHG-26/ottawa-fleet-app/blob/main/docs/architecture.md)
+for the implemented interfaces and [current delivery status](project-management.md#current-delivery-and-review)
+for the remaining acceptance gates.
 
 PostgreSQL provides the initial durable queue to keep local dependencies small. Job leases, bounded retries and idempotent completion are essential: KEDA later needs multiple workers to behave correctly. A broker can be a separate experiment when a concrete need justifies it.
 
-The contract ticket specifies endpoints, versions, state transitions, idempotency/conflict semantics, lease recovery, timestamps, pagination and bounds. A crash after fleet reservation but before job completion must recover using the same ride identity. Fixture/state behavior replaces the earlier full event-log/projector requirement; a telemetry platform is outside Phase 1.
+The [v1 application contracts](https://github.com/ANISHG-26/ottawa-fleet-app/tree/main/contracts)
+specify endpoints, state transitions, idempotency/conflicts, lease recovery,
+timestamps, pagination and bounds. A crash after fleet reservation but before
+job completion must recover using the same ride identity. Fixture/state behavior
+replaces the earlier event-log/projector requirement. Optional app telemetry
+exports to the platform-owned LGTM stack; telemetry does not gate local business
+behavior.
 
 ## Deployment progression
 
@@ -48,7 +59,11 @@ The contract ticket specifies endpoints, versions, state transitions, idempotenc
 3. **Scaling/traffic:** KEDA scales workers from durable backlog; Istio experiments exercise the worker-to-fleet call path. Measure each independently with caps and rollback.
 4. **Developer experience/AI:** Backstage catalogs an operating platform. AI begins with read-only evidence; later actions have separate policy/approval/executor boundaries. Model hosting is a separate future project and endpoint.
 
-No controller versions, cluster sizes, GPU availability or cloud cost estimates are established here. Implementation tickets verify the actual versions and capabilities used.
+The selected kind/Argo configuration is documented in [bootstrap](../bootstrap/README.md).
+The manual GCP shape and initial resource hypothesis are documented in
+[lab sizing](lab-sizing-and-cost.md). They do not establish accepted load
+measurements, repeatable CI deployment or GPU eligibility. KEDA and Istio
+versions/policies remain decisions for their bounded experiments.
 
 ## Delivery ownership
 
@@ -60,7 +75,7 @@ flowchart LR
   Promotion --> Desired[Environment values and release pins]
   Desired --> Argo[Argo CD]
   Argo --> Namespace[fleet-app workloads]
-  Terraform[Later Terraform infrastructure] --> Cluster[Cluster]
+  Terraform[Terraform infrastructure] --> Cluster[Cluster]
   Bootstrap[Platform bootstrap] --> Argo
   Cluster --> Namespace
 ```
@@ -75,6 +90,12 @@ Namespaces communicate ownership but do not provide complete isolation. Deployme
 
 Phase 1 validates requests, idempotent submission, durable jobs, two-worker concurrency, crash recovery, bounded faults and honest stale/unavailable UI states. Record workload and resources before setting performance targets.
 
-Still to decide in bounded tickets: API/job schemas, UI framework, tool versions, migrations, resource baseline, local cluster distribution and chart/database deployment options. Cloud sizing, Istio mode and KEDA scaler details are later gated decisions.
+Contracts, migrations, application packaging, kind bootstrap, bounded GKE/private
+SQL configuration and the CI expiry design have implementations. Remaining
+evidence includes the local resource baseline, live CI provisioning/expiry,
+repeatable promotion/drift/rollback and teardown. Istio mode, KEDA scaler policy,
+Backstage and AI remain later bounded decisions.
 
-See [ADR 0002](adr/0002-two-repository-local-first-platform.md) and the [roadmap](roadmap.md). This is a target architecture, not deployment evidence.
+See [ADR 0002](adr/0002-two-repository-local-first-platform.md), the [roadmap](roadmap.md)
+and the [tooling map](tooling-map.md). Architecture describes ownership and
+interfaces; acceptance requires the evidence attached to each outcome.

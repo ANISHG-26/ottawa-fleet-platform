@@ -13,10 +13,12 @@ cluster compromise. Use this setup only in the disposable local lab.
 
 ## Prepare an immutable promotion
 
-The application currently documents its Helm chart as not yet released and
-its chart values as containing syntax-only image placeholders. Do not promote
-those placeholders. A real release must first exist and must provide the exact
-chart version, full source commit, six architecture-specific image references
+The application has a tagged v0.1.0 build with six GHCR images and a chart
+package; see the [release contract](../docs/application-release-contract.md)
+for the exact source and trusted workflow. Default chart values intentionally
+omit image digests; CI values contain syntax-only placeholders. Promotion
+must use independently verified release metadata with the exact chart version,
+full source commit, six architecture-specific image references
 with non-placeholder SHA-256 digests, each image's matching source commit, and
 the externally managed database Secret name. Check chart/schema compatibility
 and verify backward-compatible migrations before recording the previous

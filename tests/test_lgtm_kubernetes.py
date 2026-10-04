@@ -37,6 +37,33 @@ class KubernetesTelemetryTests(unittest.TestCase):
         self.assertEqual(manifests.count("name: tmp"), 10)
         self.assertNotIn("type: LoadBalancer", manifests)
 
+    def test_memory_budgets_include_grafana_oom_headroom_and_fit_namespace_quota(self):
+        manifests = "\n".join(
+            (K8S / name).read_text(encoding="utf-8")
+            for name in ("backends.yaml", "grafana.yaml", "alloy.yaml")
+        )
+        namespace = (K8S / "namespace.yaml").read_text(encoding="utf-8")
+        grafana = (K8S / "grafana.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("requests: {cpu: 50m, memory: 192Mi}", grafana)
+        self.assertIn("limits: {cpu: 200m, memory: 512Mi}", grafana)
+
+        request_mib = [
+            int(value)
+            for value in re.findall(r"requests: \{[^}]*memory: (\d+)Mi\}", manifests)
+        ]
+        limit_mib = [
+            int(value)
+            for value in re.findall(r"limits: \{[^}]*memory: (\d+)Mi\}", manifests)
+        ]
+        request_quota_mib = int(re.search(r'requests.memory: (\d+)Mi', namespace).group(1))
+        limit_quota_mib = int(re.search(r'limits.memory: (\d+)Mi', namespace).group(1))
+
+        self.assertEqual(sum(request_mib), 1056)
+        self.assertEqual(sum(limit_mib), 1664)
+        self.assertLessEqual(sum(request_mib), request_quota_mib)
+        self.assertLessEqual(sum(limit_mib), limit_quota_mib)
+
     def test_prometheus_loki_and_tempo_wiring_matches_the_app_contract(self):
         alloy = (K8S / "alloy.k8s.alloy").read_text(encoding="utf-8")
         for target in (

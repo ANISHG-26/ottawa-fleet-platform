@@ -22,6 +22,8 @@ Failed Terraform commands and cluster bootstrap save bounded diagnostic output (
 
 The custom network role includes `compute.networks.updatePolicy` to attach run subnets and routers to the retained VPC. It does not grant VPC creation, deletion or IAM-policy changes; this network attachment authority remains project-wide.
 
+The same role includes `compute.instanceGroupManagers.list` for the pinned Google provider's GKE node-pool reads during apply and destroy refresh. This lists project managed instance groups; it does not grant their creation, update or deletion.
+
 For public repositories, standard GitHub-hosted runners are free. GitHub Free's private-repository allowance is 2,000 runner minutes/month and 500 MB artifact storage; the included cache allowance is 10 GB/repository. Environment secrets and deployment protection rules are available on Free for public repositories, while private environments require a paid plan. GitHub permits 100 environment secrets, each at most 48 KB. These allowances do not cover Google Cloud resources. Verify current [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions), [environment availability](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments) and [secret limits](https://docs.github.com/en/actions/reference/security/secrets) before changing repository visibility or runner type.
 
 Main-only federation does not establish a human approval gate. Inspect the live environment's required reviewers and bypass settings, and the branch's required check contexts, rather than assuming every CI check is enforced.

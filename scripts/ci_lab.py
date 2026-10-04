@@ -14,6 +14,7 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from scripts.lab_cleanup import MAX_LAB_SECONDS, create_source_archive, write_run_inputs
+from scripts.private_diagnostics import upload_failure_diagnostic
 
 ROOT = Path(__file__).resolve().parents[1]
 _SHA = re.compile(r"^[a-f0-9]{40}$")
@@ -71,11 +72,16 @@ def fetch_run_started_at(api_url: str, repository: str, run_id: str) -> str:
     return body["run_started_at"]
 
 
-def _run(command: list[str], *, cwd: Path, runner=subprocess.run) -> None:
+def _run(command: list[str], *, cwd: Path, runner=subprocess.run,
+         diagnostic_prefix: str | None = None, stage: str = "command") -> None:
     """Run quietly so secrets, Terraform values and provider output stay out of logs."""
     result = runner(command, cwd=cwd, text=True, capture_output=True, check=False)
     if result.returncode:
-        raise RuntimeError(f"provisioning command failed ({Path(command[0]).name}, exit {result.returncode})")
+        saved = (upload_failure_diagnostic(prefix=diagnostic_prefix, stage=stage,
+                  returncode=result.returncode, stdout=result.stdout, stderr=result.stderr, runner=runner)
+                 if diagnostic_prefix else False)
+        status = "private diagnostic saved" if saved else "private diagnostic unavailable"
+        raise RuntimeError(f"provisioning command failed ({Path(command[0]).name}, exit {result.returncode}; {status})")
 
 
 def _access_token(runner=subprocess.run) -> str:
@@ -276,7 +282,8 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
         archive = create_source_archive(source_revision=revision, output_path=work / "source.tgz",
                                         repo_root=source_root,
                                         paths=("terraform/lab", "scripts/lab_cleanup.py",
-                                               "scripts/cleanup_execute.py", "scripts/__init__.py"))
+                                               "scripts/cleanup_execute.py", "scripts/private_diagnostics.py",
+                                               "scripts/__init__.py"))
         inputs = [
             (Path(outputs["request_file"]), f"{base_uri}/request.json"),
             (archive, f"{base_uri}/source.tgz"),
@@ -293,6 +300,9 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
         for path, uri in inputs:
             _upload(path, uri, runner)
 
+        # Only enable failure artifacts after all immutable run inputs exist.
+        diagnostic_prefix = f"{base_uri}/diagnostics"
+
         _create_task(
             project=project, location=env["LAB_TASK_LOCATION"], queue=env["LAB_TASK_QUEUE"],
             task_id=f"fleet-r{run_id}", url=env["LAB_SHUTDOWN_URL"],
@@ -302,13 +312,16 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
         task_registered = True
 
         terraform = source_root / "terraform" / "lab"
-        _run(["terraform", "init", "-input=false", f"-backend-config={outputs['backend']}"], cwd=terraform, runner=runner)
+        _run(["terraform", "init", "-input=false", f"-backend-config={outputs['backend']}"], cwd=terraform,
+             runner=runner, diagnostic_prefix=diagnostic_prefix, stage="terraform-init")
         plan = work / "reviewed.tfplan"
-        _run(["terraform", "plan", "-input=false", f"-var-file={outputs['tfvars']}", f"-out={plan}"], cwd=terraform, runner=runner)
+        _run(["terraform", "plan", "-input=false", f"-var-file={outputs['tfvars']}", f"-out={plan}"], cwd=terraform,
+             runner=runner, diagnostic_prefix=diagnostic_prefix, stage="terraform-plan")
         if datetime.now(timezone.utc) >= datetime.fromisoformat(expires_at.replace("Z", "+00:00")):
             raise RuntimeError("the fixed two-hour expiry elapsed before Terraform apply")
         apply_started = True
-        _run(["terraform", "apply", "-input=false", str(plan)], cwd=terraform, runner=runner)
+        _run(["terraform", "apply", "-input=false", str(plan)], cwd=terraform,
+             runner=runner, diagnostic_prefix=diagnostic_prefix, stage="terraform-apply")
 
         if datetime.now(timezone.utc) >= datetime.fromisoformat(expires_at.replace("Z", "+00:00")):
             raise RuntimeError("the fixed two-hour expiry elapsed before cluster bootstrap")
@@ -316,7 +329,8 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
         _run(["python", "-m", "scripts.gcp_lab", "bootstrap", "--project", project,
               "--zone", json.loads(env["LAB_TFVARS_JSON"])["zone"],
               "--cluster", f"fleet-lab-r{run_id}", "--kubeconfig", str(kubeconfig)],
-             cwd=source_root, runner=runner)
+             cwd=source_root, runner=runner, diagnostic_prefix=diagnostic_prefix,
+             stage="cluster-bootstrap")
         return {"run_id": run_id, "expires_at": expires_at, "task": f"fleet-r{run_id}"}
     except Exception:
         if task_registered:

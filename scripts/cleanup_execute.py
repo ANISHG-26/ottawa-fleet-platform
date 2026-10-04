@@ -16,6 +16,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from scripts.lab_cleanup import validate_cleanup_request
+from scripts.private_diagnostics import upload_failure_diagnostic
 
 
 _RUN_ID = re.compile(r"^[0-9]{8,13}$")
@@ -26,8 +27,23 @@ _TF_SHA256 = {
 }
 
 
-def run(args: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> str:
-    result = subprocess.run(args, cwd=cwd, env=env, check=True, text=True, capture_output=True)
+class CleanupCommandFailure(RuntimeError):
+    """Sanitized failure summary; captured output is kept only in private GCS artifact."""
+
+
+def run(args: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None,
+        diagnostic_prefix: str | None = None, stage: str = "cleanup-command",
+        runner=subprocess.run) -> str:
+    result = runner(args, cwd=cwd, env=env, check=False, text=True, capture_output=True)
+    if result.returncode:
+        if not diagnostic_prefix:
+            # Preserve API not-found handling and other existing subprocess callers.
+            raise subprocess.CalledProcessError(result.returncode, args,
+                                                output=result.stdout, stderr=result.stderr)
+        saved = upload_failure_diagnostic(prefix=diagnostic_prefix, stage=stage,
+                  returncode=result.returncode, stdout=result.stdout, stderr=result.stderr)
+        status = "private diagnostic saved" if saved else "private diagnostic unavailable"
+        raise CleanupCommandFailure(f"cleanup command failed at {stage} (exit {result.returncode}; {status})")
     return result.stdout
 
 
@@ -171,6 +187,7 @@ def main() -> int:
             raise ValueError("request does not identify an exact CI run")
         tfvars = json.loads(vars_path.read_text())
         prefix = f"gcp-lab/runs/{run_id}"
+        diagnostic_prefix = f"gs://{bucket}/{prefix}/diagnostics"
         if (tfvars.get("project_id") != project or tfvars.get("cluster_name") != request["cluster_name"] or
                 tfvars.get("retained_network_name") != retained_network or
                 backend_path.read_text() != f'bucket = "{bucket}"\nprefix = "{prefix}"\n'):
@@ -180,7 +197,8 @@ def main() -> int:
         terraform = install_terraform(work)
         env = dict(os.environ, TF_IN_AUTOMATION="1", TF_INPUT="0")
         print("[cleanup] stage=terraform-init", file=sys.stderr, flush=True)
-        run([str(terraform), "init", "-input=false", f"-backend-config={backend_path}"], cwd=root, env=env)
+        run([str(terraform), "init", "-input=false", f"-backend-config={backend_path}"], cwd=root, env=env,
+            diagnostic_prefix=diagnostic_prefix, stage="terraform-init")
         # Remove the run's public gateway Service first so its external load balancer
         # begins deletion while the cluster and its network remain available.
         print("[cleanup] stage=gateway-cleanup", file=sys.stderr, flush=True)
@@ -203,7 +221,8 @@ def main() -> int:
             gateway_rule_links = inventory["links"]
         print("[cleanup] stage=terraform-destroy", file=sys.stderr, flush=True)
         run([str(terraform), "destroy", "-auto-approve", "-input=false",
-             f"-var-file={vars_path}"], cwd=root, env=env)
+             f"-var-file={vars_path}"], cwd=root, env=env,
+            diagnostic_prefix=diagnostic_prefix, stage="terraform-destroy")
         print("[cleanup] stage=verify-absent", file=sys.stderr, flush=True)
         verify_absent(project, request["cluster_name"], tfvars["zone"], run, gateway_rule_links)
     return 0
@@ -258,6 +277,9 @@ def verify_absent(project: str, cluster: str, zone: str, command=run,
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except CleanupCommandFailure as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
     except Exception as exc:
         print(f"cleanup failed: {type(exc).__name__}", file=sys.stderr)
         sys.exit(1)

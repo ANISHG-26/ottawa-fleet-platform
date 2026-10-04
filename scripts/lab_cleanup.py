@@ -156,7 +156,8 @@ def write_run_inputs(*, run_id: str, source_revision: str, started_at: str, expi
 def create_source_archive(*, source_revision: str, output_path: str | Path,
                           repo_root: str | Path | None = None,
                           paths: tuple[str, ...] = ("terraform/lab", "scripts/lab_cleanup.py",
-                                                    "scripts/cleanup_execute.py", "scripts/__init__.py")) -> Path:
+                                                    "scripts/cleanup_execute.py", "scripts/private_diagnostics.py",
+                                                    "scripts/__init__.py")) -> Path:
     """Archive only cleanup code and Terraform from the exact committed revision."""
     if not isinstance(source_revision, str) or not _REVISION.fullmatch(source_revision) or set(source_revision) == {"0"}:
         raise ValueError("source_revision must be a non-placeholder full Git commit SHA")
@@ -165,7 +166,8 @@ def create_source_archive(*, source_revision: str, output_path: str | Path,
     if output.is_relative_to(root):
         raise ValueError("private source archive must be written outside the public repository")
     output.parent.mkdir(parents=True, exist_ok=True)
-    allowed = {"terraform/lab", "scripts/lab_cleanup.py", "scripts/cleanup_execute.py", "scripts/__init__.py"}
+    allowed = {"terraform/lab", "scripts/lab_cleanup.py", "scripts/cleanup_execute.py",
+               "scripts/private_diagnostics.py", "scripts/__init__.py"}
     if not paths or set(paths) - allowed:
         raise ValueError("source archive paths must use the cleanup source allowlist")
     archive = subprocess.run(

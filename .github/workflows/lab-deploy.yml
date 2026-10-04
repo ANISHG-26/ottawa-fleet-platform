@@ -69,6 +69,6 @@ jobs:
           LAB_STATE_BUCKET: ${{ secrets.LAB_STATE_BUCKET }}
           LAB_TFVARS_JSON: ${{ secrets.LAB_TFVARS_JSON }}
           LAB_SHUTDOWN_URL: ${{ secrets.LAB_SHUTDOWN_URL }}
-          LAB_TASK_QUEUE: ${{ vars.LAB_TASK_QUEUE }}
-          LAB_TASK_LOCATION: ${{ vars.LAB_TASK_LOCATION }}
+          LAB_TASK_QUEUE: ${{ secrets.LAB_TASK_QUEUE }}
+          LAB_TASK_LOCATION: ${{ secrets.LAB_TASK_LOCATION }}
           LAB_TASK_INVOKER_SERVICE_ACCOUNT: ${{ secrets.LAB_TASK_INVOKER_SERVICE_ACCOUNT }}

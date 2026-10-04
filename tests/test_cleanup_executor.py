@@ -154,6 +154,17 @@ class CleanupExecutorTests(unittest.TestCase):
             cleanup.verify_absent('synthetic-project', 'fleet-lab-r12345678901',
                                   'us-central1-a', command)
 
+    def test_run_wrapper_preserves_not_found_for_absence_verification(self):
+        cluster = 'fleet-lab-r12345678901'
+        def runner(args, **kwargs):
+            if 'describe' in args:
+                return subprocess.CompletedProcess(args, 1, '', 'NOT_FOUND')
+            return subprocess.CompletedProcess(args, 0, '[]', '')
+        def command(args):
+            return cleanup.run(args, runner=runner)
+
+        cleanup.verify_absent('synthetic-project', cluster, 'us-central1-a', command)
+
     def test_recorded_hashed_gateway_rule_prevents_cleanup_success(self):
         link = 'projects/synthetic-project/regions/us-central1/forwardingRules/k8s2-hashed'
         def command(args):

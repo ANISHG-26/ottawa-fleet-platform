@@ -13,11 +13,12 @@ locals {
     function_build = "fleet-lab-function-build"
   }
 
-  function_name = "fleet-lab-shutdown"
-  queue_name    = "fleet-lab-expiry"
-  function_url  = coalesce(var.function_url, "https://${var.cloud_build_location}-${var.project_id}.cloudfunctions.net/${local.function_name}")
-  source_hash   = filesha256(var.function_source_zip_path)
-  source_object = "function-sources/lab-shutdown-${local.source_hash}.zip"
+  function_name                = "fleet-lab-shutdown"
+  queue_name                   = "fleet-lab-expiry"
+  function_url                 = coalesce(var.function_url, "https://${var.cloud_build_location}-${var.project_id}.cloudfunctions.net/${local.function_name}")
+  source_hash                  = filesha256(var.function_source_zip_path)
+  source_object                = "function-sources/lab-shutdown-${local.source_hash}.zip"
+  function_build_source_bucket = "gcf-v2-sources-${var.project_number}-${var.cloud_build_location}"
 
   github_repo    = "ANISHG-26/ottawa-fleet-platform"
   workflow_ref   = "${local.github_repo}/.github/workflows/lab-deploy.yml@refs/heads/main"
@@ -277,6 +278,7 @@ resource "google_cloudfunctions2_function" "shutdown" {
     google_project_iam_member.function_builder_log_writer,
     google_project_iam_member.function_builder_service_usage,
     google_storage_bucket_iam_member.function_builder_source_read,
+    google_project_iam_member.function_builder_copied_source_read,
     google_storage_bucket_iam_member.runtime_bucket_access,
   ]
 }
@@ -431,6 +433,23 @@ resource "google_storage_bucket_iam_member" "function_builder_source_read" {
     description = "The function build identity can read only versioned shutdown source archives."
     expression  = "resource.name.startsWith(\"projects/_/buckets/${var.ci_state_bucket}/objects/function-sources/\")"
   }
+}
+
+# Cloud Run functions copies the source archive into its regional managed
+# staging bucket before Cloud Build retrieves it. Keep that read grant to this
+# function's copied source object prefix only.
+resource "google_project_iam_member" "function_builder_copied_source_read" {
+  project = var.project_id
+  role    = "roles/storage.objectViewer"
+  member  = "serviceAccount:${google_service_account.runtime["function_build"].email}"
+
+  condition {
+    title       = "shutdown function copied source only"
+    description = "The function build identity can read only the copied shutdown function source objects."
+    expression  = "resource.name.startsWith(\"projects/_/buckets/${local.function_build_source_bucket}/objects/${local.function_name}/\")"
+  }
+
+  depends_on = [google_project_service.automation]
 }
 
 resource "google_artifact_registry_repository_iam_member" "function_builder_writer" {

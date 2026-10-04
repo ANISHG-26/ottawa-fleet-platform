@@ -44,7 +44,7 @@ jobs:
           install_components: 'gke-gcloud-auth-plugin,kubectl'
 
       - name: Install pinned Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d9509b7e9b99a40 # v3.1.2
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: 1.8.4
           terraform_wrapper: false

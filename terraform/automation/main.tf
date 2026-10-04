@@ -22,7 +22,7 @@ locals {
 
   github_repo    = "ANISHG-26/ottawa-fleet-platform"
   workflow_ref   = "${local.github_repo}/.github/workflows/lab-deploy.yml@refs/heads/main"
-  github_subject = "repo:${local.github_repo}:environment:gcp-lab"
+  github_subject = "repo:ANISHG-26@${var.github_repository_owner_id}/ottawa-fleet-platform@${var.github_repository_id}:environment:gcp-lab"
   workload_identity_condition = join(" && ", [
     "assertion.repository_id == '${var.github_repository_id}'",
     "assertion.repository_owner_id == '${var.github_repository_owner_id}'",

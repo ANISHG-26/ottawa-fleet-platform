@@ -81,7 +81,7 @@ run "reviewed_automation_is_private_and_bounded" {
       contains(google_project_iam_custom_role.cleanup_inventory_reader.permissions, "compute.forwardingRules.list") &&
       google_service_account_iam_member.deploy_act_as_invoker.role == "roles/iam.serviceAccountUser" &&
       google_iam_workload_identity_pool_provider.github.oidc[0].issuer_uri == "https://token.actions.githubusercontent.com" &&
-      nonsensitive(google_iam_workload_identity_pool_provider.github.attribute_condition) == "assertion.repository_id == '1234567890' && assertion.repository_owner_id == '9876543210' && assertion.repository == 'ANISHG-26/ottawa-fleet-platform' && assertion.ref == 'refs/heads/main' && assertion.workflow_ref == 'ANISHG-26/ottawa-fleet-platform/.github/workflows/lab-deploy.yml@refs/heads/main' && assertion.sub == 'repo:ANISHG-26/ottawa-fleet-platform:environment:gcp-lab'"
+      nonsensitive(google_iam_workload_identity_pool_provider.github.attribute_condition) == "assertion.repository_id == '1234567890' && assertion.repository_owner_id == '9876543210' && assertion.repository == 'ANISHG-26/ottawa-fleet-platform' && assertion.ref == 'refs/heads/main' && assertion.workflow_ref == 'ANISHG-26/ottawa-fleet-platform/.github/workflows/lab-deploy.yml@refs/heads/main' && assertion.sub == 'repo:ANISHG-26@9876543210/ottawa-fleet-platform@1234567890:environment:gcp-lab'"
     )
     error_message = "The reviewed automation plan must keep CI state private, serialize expiry callbacks, bound the shutdown function, grant only task identity invocation, restrict network rights, and pin GitHub federation."
   }

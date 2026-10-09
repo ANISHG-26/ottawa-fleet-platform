@@ -37,6 +37,7 @@ Phase 1 builds and validates the application locally. Kubernetes/GitOps follow i
 - [Current ADR](docs/adr/0002-two-repository-local-first-platform.md)
 - [Lab lifecycle](docs/runbooks/lab-lifecycle.md)
 - [Local workload acceptance](docs/runbooks/local-acceptance.md)
+- [First application deployment acceptance](docs/acceptance/first-application-deployment.md)
 - [On-demand CI lab and expiry](docs/runbooks/on-demand-ci.md)
 - [Telemetry setup](docs/runbooks/telemetry.md)
 - [Reviewer credential lifecycle](docs/runbooks/lab-credentials.md)

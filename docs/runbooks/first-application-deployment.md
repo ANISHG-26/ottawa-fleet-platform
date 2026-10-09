@@ -5,6 +5,11 @@ lab. It is an operating procedure, not evidence that the cluster is currently
 available or that a deployment has succeeded. Keep the application chart and
 images in the application repository and pin them from this platform repo.
 
+The [on-demand CI application stage](on-demand-ci.md#automatic-application-stage)
+prepares this deployment automatically for future fresh labs using the latest
+stable tag. Its first automated live run remains pending. The steps below remain
+the manual promotion and inspection path.
+
 ## Release and review
 
 1. Select a trusted application tag whose CI run completed successfully. Check

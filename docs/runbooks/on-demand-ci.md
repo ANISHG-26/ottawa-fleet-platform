@@ -33,11 +33,43 @@ Main-only federation does not establish a human approval gate. Inspect the live 
 1. Dispatch the main-only workflow in the reviewed `gcp-lab` environment. Authenticate through short-lived GitHub OIDC/WIF, restricted to the exact repository/owner identities, branch, workflow and environment. The subject uses GitHub's immutable `repo:OWNER@OWNER-ID/REPO@REPO-ID:environment:gcp-lab` format. Verify the active prefix with `gh api repos/ANISHG-26/ottawa-fleet-platform/actions/oidc/customization/sub` before activation; do not relax the condition to work around a format mismatch.
 2. Derive the run ID and source SHA from GitHub and the deadline from the Actions run start, not the provisioning step's clock. Store immutable private run inputs and cleanup source in GCS. Acquire the run lease before mutations.
 3. Register an authenticated Cloud Task for exactly start plus two hours before Terraform apply. Failure to register prevents provisioning. On provisioning failure, request immediate delivery of that same task; its durable schedule is the independent backstop.
-4. Terraform initializes its unique GCS backend, plans/applies the reviewed one-node/private-SQL shape in the retained network, then bootstraps Argo using an exact DNS-endpoint kubeconfig outside the checkout.
+4. Terraform initializes its unique GCS backend, plans/applies the reviewed one-node/private-SQL shape in the retained network, then bootstraps Argo using an exact DNS-endpoint kubeconfig outside the checkout. The application stage selects and verifies the latest stable application release, prepares the database Secret privately, and applies its pinned Argo Application. See the application stage below.
 5. At expiry, Cloud Tasks invokes the Cloud Run function with only the run ID. The function loads and validates the stored identity and launches a run-scoped Cloud Build cleanup job. Short durable polling callbacks observe completion, reconcile duplicates and bound failed-build retries.
 6. Cleanup removes any exact gateway Service before cluster deletion, destroys only the run's Terraform state, and verifies owned resources are absent. Failure retains state and the lease for repair. Successful verification permits matching-generation lease release.
 
-The first workflow is infrastructure and Argo bootstrap acceptance. It does not yet deploy the complete application/monitoring release or prove end-to-end CD. Add reviewed immutable release inputs and application/telemetry checks before making that claim. Keep any UI ingress restricted to the private reviewer `/32`.
+The application stage is prepared with offline checks; its first automated live run remains to be tested. The earlier manual v0.2.1 deployment does not establish that this automatic stage works in a fresh lab. Monitoring installation, drift and rollback experiments remain separate. Keep any UI ingress restricted to the private reviewer `/32`.
+
+## Automatic application stage
+
+Each dispatch resolves the highest stable `vMAJOR.MINOR.PATCH` application tag,
+at or above `v0.2.1`, once. Prereleases are excluded. The selected tag must have
+a successful `release.yml` push run for its exact source commit. A missing,
+unfinished or failed latest release stops deployment; the stage does not
+silently substitute an older release.
+
+The stage reads the seven public GHCR images published for that tag, verifies
+their immutable digests, Linux/amd64 identity and source/version labels, and
+checks the app-owned chart version at the same source commit. It uses published
+registry artifacts rather than relying on time-limited Actions artifact ZIPs.
+No additional personal access token or registry credential is required.
+
+The run's private Terraform outputs and stored password prepare
+`ottawa-fleet-database` in `fleet-app`. Secret values go through captured stdin,
+never command arguments or public evidence. Argo receives an exact chart source
+SHA and seven image digests, with simulation enabled, the 20-vehicle synthetic
+profile and a green background. Later app tags are selected on the next fresh
+lab dispatch; an existing lab does not follow a floating tag.
+
+The workflow records the selected tag, source commit, trusted release run and
+image digests in its Actions summary. Its readiness wait is capped at ten minutes
+and the original lease, whichever ends first. It checks the migration hook,
+Argo's exact synced source, five available deployments, and read-only web runtime,
+fleet inventory, route and Ride readiness responses through the Kubernetes
+service proxy. A passenger trip journey remains part of later live acceptance.
+Failures use the existing exact-run cleanup backstop. It does not extend the
+two-hour expiry or claim automatic database
+rollback compatibility for future releases. UI access continues through the
+documented operator port forward; this stage adds no public ingress.
 
 The instance owns the disposable SQL database and user. Their provider deletion policy is `ABANDON`: Terraform removes those child entries from state and then deletes the instance, which removes its databases and users. This avoids separate database/user drops being blocked by active connections or table ownership. Cleanup still fails if the instance survives; abandoning the child entries does not establish successful teardown.
 

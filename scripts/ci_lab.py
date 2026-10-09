@@ -331,7 +331,18 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
               "--cluster", f"fleet-lab-r{run_id}", "--kubeconfig", str(kubeconfig)],
              cwd=source_root, runner=runner, diagnostic_prefix=diagnostic_prefix,
              stage="cluster-bootstrap")
-        return {"run_id": run_id, "expires_at": expires_at, "task": f"fleet-r{run_id}"}
+        if datetime.now(timezone.utc) >= datetime.fromisoformat(expires_at.replace("Z", "+00:00")):
+            raise RuntimeError("the fixed two-hour expiry elapsed before application deployment")
+        from scripts.ci_application import deploy as deploy_application
+        private_tfvars = json.loads(Path(outputs["tfvars"]).read_text(encoding="utf-8"))
+        app_release = deploy_application(
+            project=project, zone=private_tfvars["zone"], cluster=f"fleet-lab-r{run_id}",
+            kubeconfig=str(kubeconfig), expires_at=expires_at, secret_values=private_tfvars,
+            template_path=source_root / "gitops" / "environments" / "lab" / "application.json",
+            runner=runner,
+        )
+        return {"run_id": run_id, "expires_at": expires_at, "task": f"fleet-r{run_id}",
+                "application": app_release}
     except Exception:
         if task_registered:
             # Invoke the exact already-registered cleanup task now as a failure backstop.
@@ -358,6 +369,17 @@ def main() -> int:
     try:
         result = run_pipeline()
         print(f"Provisioned bounded CI lab run {result['run_id']}; scheduled expiry {result['expires_at']}.")
+        if result.get("application"):
+            release = result["application"]
+            summary = [f"## Lab application deployment", "",
+                       f"- Release: `{release['tag']}` at `{release['sha']}`",
+                       f"- Trusted release workflow run: `{release['run_id']}`",
+                       "- Immutable image digests:"]
+            summary.extend(f"  - `{name}`: `{digest}`" for name, digest in sorted(release["digests"].items()))
+            summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+            if summary_path:
+                with open(summary_path, "a", encoding="utf-8") as target:
+                    target.write("\n".join(summary) + "\n")
         return 0
     except Exception as exc:
         print(f"CI lab provisioning stopped: {exc}", file=__import__("sys").stderr)

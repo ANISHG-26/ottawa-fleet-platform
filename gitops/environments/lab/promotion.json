@@ -2,46 +2,46 @@
   "chart": {
     "repository": "https://github.com/ANISHG-26/ottawa-fleet-app.git",
     "name": "charts/ottawa-fleet",
-    "version": "0.2.0"
+    "version": "0.2.1"
   },
   "source": {
     "repository": "https://github.com/ANISHG-26/ottawa-fleet-app.git",
-    "revision": "0be20d8936968a8757b9663f207dd7f968597549"
+    "revision": "f91147ce8b7cc997e2bebe371fcdec8a6cc630d2"
   },
   "images": {
     "worker": {
-      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/assignment-worker@sha256:54957e63899f762178210319cd4ee52f3e94321bdf91024a3e984709e31ef7c4",
-      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/assignment-worker@sha256:4890f663c1da3d9d70d8af6fd1d82d61266418807d11526b520018dd0b301f72",
+      "sourceCommit": "f91147ce8b7cc997e2bebe371fcdec8a6cc630d2",
       "architecture": "amd64"
     },
     "dbInit": {
-      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/db-init@sha256:fca7245cb451ef1a2783dd8a89c95eed13d97ce128920da50f450d8b7ec9cab4",
-      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/db-init@sha256:661631d8bd4f6cd1ecf89678a0aa8922b9fabd69df784a9f8efcf30506056930",
+      "sourceCommit": "f91147ce8b7cc997e2bebe371fcdec8a6cc630d2",
       "architecture": "amd64"
     },
     "fleetApi": {
-      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/fleet-api@sha256:1f62b28ad216807780137531c056b54a035f6f4b47140842d49cb477225d9d86",
-      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/fleet-api@sha256:b5c85ca9b5805ceb58bb36f97a40b9911c979b35b1641caac0d13006f624b9b4",
+      "sourceCommit": "f91147ce8b7cc997e2bebe371fcdec8a6cc630d2",
       "architecture": "amd64"
     },
     "rideApi": {
-      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/ride-api@sha256:adf63db95c61aecbfb357b628ad664af29d988a40903350ac5930211cc1dc86d",
-      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/ride-api@sha256:d13283ea705213f7bec270d8d0bd25437ada64274e7c12df20ad95abd09bb77d",
+      "sourceCommit": "f91147ce8b7cc997e2bebe371fcdec8a6cc630d2",
       "architecture": "amd64"
     },
     "scenarioRunner": {
-      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/scenario-runner@sha256:d7527167d7cf609a513bbb914a532b399c2e854993542eb4487e5d7bf4170473",
-      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/scenario-runner@sha256:f54fd3e208c90c46149d32f3fc3de46b7182c9575ace0edf11ad4faedbb0ac6c",
+      "sourceCommit": "f91147ce8b7cc997e2bebe371fcdec8a6cc630d2",
       "architecture": "amd64"
     },
     "simulationController": {
-      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/simulation-controller@sha256:6cfb7685a52b6ef21a8bbf9f7a2bbc9aa414824d99bf7cdc6625b0736be78736",
-      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/simulation-controller@sha256:82fa2339f9f9f325cde8ec4f3d8ebee0dd389726f34a63c34de359c3d84891a3",
+      "sourceCommit": "f91147ce8b7cc997e2bebe371fcdec8a6cc630d2",
       "architecture": "amd64"
     },
     "web": {
-      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/web@sha256:10e25b2e2116fe50547970ac7ffd5f943760d62e3f3cf20beafa1201bf36ce13",
-      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/web@sha256:a5b820faaabafa848d0e12be2da5ed9eb942d6e49eb8833fb695526e2a75a44c",
+      "sourceCommit": "f91147ce8b7cc997e2bebe371fcdec8a6cc630d2",
       "architecture": "amd64"
     }
   },

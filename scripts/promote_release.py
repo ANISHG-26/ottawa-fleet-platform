@@ -14,6 +14,8 @@ VERSION_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-
 REPO = "https://github.com/ANISHG-26/ottawa-fleet-app.git"
 IMAGE_PATHS = {"dbInit": "db-init", "fleetApi": "fleet-api", "rideApi": "ride-api",
                "worker": "assignment-worker", "scenarioRunner": "scenario-runner", "web": "web"}
+IMAGE_PATHS_WITH_SIMULATION = {**IMAGE_PATHS, "simulationController": "simulation-controller"}
+RUNTIME_FIELDS = {"simulationEnabled", "fleetProfile", "backgroundColor"}
 
 
 def parse_immutable_image(value: str) -> str:
@@ -40,17 +42,36 @@ def validate_promotion(promotion: dict) -> dict:
         chart, source, images, database, rollback = (promotion[k] for k in ("chart", "source", "images", "database", "rollback"))
         if chart.get("repository") != REPO or chart.get("name") != "charts/ottawa-fleet":
             raise ValueError("chart must reference the app-owned Git chart path")
-        parse_chart_version(chart.get("version"))
+        chart_version = parse_chart_version(chart.get("version"))
+        chart_core = tuple(int(part) for part in chart_version.split("-")[0].split("."))
+        chart_has_runtime_contract = chart_core > (0, 2, 0) or (chart_core == (0, 2, 0) and "-" not in chart_version)
         if source.get("repository") != REPO:
             raise ValueError("source repository must be the application repository")
         parse_commit_sha(source.get("revision"))
-        if not isinstance(images, dict) or set(images) != set(IMAGE_PATHS):
-            raise ValueError("all six release image digests are required")
+        runtime_present = "runtime" in promotion
+        runtime = promotion.get("runtime")
+        image_paths = IMAGE_PATHS_WITH_SIMULATION if chart_has_runtime_contract else IMAGE_PATHS
+        if not isinstance(images, dict) or set(images) != set(image_paths):
+            expected_count = 7 if chart_has_runtime_contract else 6
+            raise ValueError(f"chart version {chart_version} requires exactly {expected_count} release images")
+        if runtime_present:
+            if not chart_has_runtime_contract:
+                raise ValueError("runtime settings require chart version 0.2.0 or newer")
+            if not isinstance(runtime, dict) or set(runtime) != RUNTIME_FIELDS:
+                raise ValueError("runtime must contain exactly simulationEnabled, fleetProfile, and backgroundColor")
+            if type(runtime["simulationEnabled"]) is not bool:
+                raise ValueError("runtime.simulationEnabled must be a boolean")
+            if runtime["fleetProfile"] not in {"default-six", "route20synthetic"}:
+                raise ValueError("runtime.fleetProfile must be default-six or route20synthetic")
+            if runtime["backgroundColor"] not in {"green", "blue"}:
+                raise ValueError("runtime.backgroundColor must be green or blue")
+            if runtime["simulationEnabled"] and runtime["fleetProfile"] != "route20synthetic":
+                raise ValueError("simulation requires runtime.fleetProfile=route20synthetic")
         for name, image in images.items():
             if not isinstance(image, dict):
                 raise ValueError("each image requires immutable reference, source commit, and architecture")
             parse_immutable_image(image.get("reference"))
-            expected_repo = f"ghcr.io/anishg-26/ottawa-fleet-app/{IMAGE_PATHS[name]}"
+            expected_repo = f"ghcr.io/anishg-26/ottawa-fleet-app/{image_paths[name]}"
             if image["reference"].rsplit("@sha256:", 1)[0] != expected_repo:
                 raise ValueError(f"{name} image repository must match the app release workflow")
             if parse_commit_sha(image.get("sourceCommit")) != source["revision"]:
@@ -101,6 +122,13 @@ def application_manifest(promotion: dict) -> dict:
     params += [{"name": f"images.{name}.sourceCommit", "value": image["sourceCommit"]} for name, image in p["images"].items()]
     params += [{"name": f"images.{name}.architecture", "value": image["architecture"]} for name, image in p["images"].items()]
     params.append({"name": "database.existingSecret", "value": p["database"]["existingSecret"]})
+    if "runtime" in p:
+        runtime = p["runtime"]
+        params += [
+            {"name": "simulation.enabled", "value": str(runtime["simulationEnabled"]).lower()},
+            {"name": "simulation.fleetProfile", "value": runtime["fleetProfile"]},
+            {"name": "web.backgroundColor", "value": runtime["backgroundColor"]},
+        ]
     return {"apiVersion": "argoproj.io/v1alpha1", "kind": "Application", "metadata": {"name": "ottawa-fleet", "namespace": "argocd", "labels": {"platform.ottawa-fleet/owner": "gitops"}},
             "spec": {"project": "ottawa-fleet", "source": {"repoURL": REPO, "targetRevision": p["source"]["revision"],
                          "path": p["chart"]["name"], "helm": {"parameters": params}},

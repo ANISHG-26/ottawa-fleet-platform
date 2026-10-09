@@ -67,6 +67,8 @@ def collect_endpoint(url: str, timeout: float = 2.0, max_bytes: int = MAX_RESPON
                     "response_bytes": len(body), "elapsed_ms": round((time.monotonic() - start) * 1000, 2),
                     "body": body.decode("utf-8", errors="replace")}
     except URLError as exc:
+        if isinstance(exc.reason, ValueError):
+            raise exc.reason
         return {"url": url, "error": str(exc.reason), "elapsed_ms": round((time.monotonic() - start) * 1000, 2)}
 
 

@@ -57,7 +57,7 @@ class ReleasePinTests(unittest.TestCase):
 
     def _promotion(self):
         return {
-            'chart': {'repository': 'https://github.com/ANISHG-26/ottawa-fleet-app.git', 'name': 'charts/ottawa-fleet', 'version': '1.2.3'},
+            'chart': {'repository': 'https://github.com/ANISHG-26/ottawa-fleet-app.git', 'name': 'charts/ottawa-fleet', 'version': '0.1.0'},
             'source': {'repository': 'https://github.com/ANISHG-26/ottawa-fleet-app.git', 'revision': 'a' * 40},
             'images': {name: {'reference': 'ghcr.io/anishg-26/ottawa-fleet-app/' + path + '@sha256:' + 'abcdef'[i] * 64,
                               'sourceCommit': 'a' * 40, 'architecture': 'amd64'}
@@ -77,12 +77,81 @@ class ReleasePinTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_promotion(bad)
 
+    def test_seven_image_runtime_promotion_renders_only_bounded_values(self):
+        promotion = self._promotion()
+        promotion['chart']['version'] = '0.2.0'
+        promotion['images']['simulationController'] = {
+            'reference': 'ghcr.io/anishg-26/ottawa-fleet-app/simulation-controller@sha256:' + '7' * 64,
+            'sourceCommit': 'a' * 40, 'architecture': 'amd64',
+        }
+        promotion['runtime'] = {
+            'simulationEnabled': True, 'fleetProfile': 'route20synthetic', 'backgroundColor': 'blue',
+        }
+        manifest = application_manifest(promotion)
+        params = {item['name']: item['value'] for item in manifest['spec']['source']['helm']['parameters']}
+        self.assertEqual(params['images.simulationController.repository'], 'ghcr.io/anishg-26/ottawa-fleet-app/simulation-controller')
+        self.assertEqual(params['simulation.enabled'], 'true')
+        self.assertEqual(params['simulation.fleetProfile'], 'route20synthetic')
+        self.assertEqual(params['web.backgroundColor'], 'blue')
+
+    def test_seven_image_and_runtime_contract_rejects_incomplete_or_unsafe_settings(self):
+        promotion = self._promotion()
+        promotion['chart']['version'] = '0.2.0'
+        promotion['images']['simulationController'] = {
+            'reference': 'ghcr.io/anishg-26/ottawa-fleet-app/simulation-controller@sha256:' + '7' * 64,
+            'sourceCommit': 'a' * 40, 'architecture': 'amd64',
+        }
+        promotion['runtime'] = {
+            'simulationEnabled': True, 'fleetProfile': 'route20synthetic', 'backgroundColor': 'green',
+        }
+        variants = []
+        missing_controller = self._promotion()
+        missing_controller['chart']['version'] = '0.2.0'
+        missing_controller['runtime'] = promotion['runtime'].copy()
+        variants.append(missing_controller)
+        mismatched_controller = {**promotion, 'images': dict(promotion['images'])}
+        mismatched_controller['images']['simulationController'] = dict(promotion['images']['simulationController'])
+        mismatched_controller['images']['simulationController']['sourceCommit'] = 'b' * 40
+        variants.append(mismatched_controller)
+        for key, value in (
+            ('simulationEnabled', 'true'),
+            ('fleetProfile', 'unknown'),
+            ('fleetProfile', 'route20'),
+            ('backgroundColor', 'red'),
+        ):
+            unsafe = {**promotion, 'runtime': promotion['runtime'].copy()}
+            unsafe['runtime'][key] = value
+            variants.append(unsafe)
+        enabled_default = {**promotion, 'runtime': promotion['runtime'].copy()}
+        enabled_default['runtime']['fleetProfile'] = 'default-six'
+        variants.append(enabled_default)
+        old_chart = {**promotion, 'chart': {**promotion['chart'], 'version': '0.1.9'}}
+        variants.append(old_chart)
+        for invalid in variants:
+            with self.subTest(runtime=invalid.get('runtime'), images=set(invalid['images'])):
+                with self.assertRaises(ValueError):
+                    validate_promotion(invalid)
+
+    def test_image_set_must_match_chart_generation_even_without_runtime_settings(self):
+        legacy_with_new_chart = self._promotion()
+        legacy_with_new_chart['chart']['version'] = '0.2.0'
+        new_with_legacy_chart = self._promotion()
+        new_with_legacy_chart['chart']['version'] = '0.1.9'
+        new_with_legacy_chart['images']['simulationController'] = {
+            'reference': 'ghcr.io/anishg-26/ottawa-fleet-app/simulation-controller@sha256:' + '7' * 64,
+            'sourceCommit': 'a' * 40, 'architecture': 'amd64',
+        }
+        for invalid in (legacy_with_new_chart, new_with_legacy_chart):
+            with self.subTest(version=invalid['chart']['version'], count=len(invalid['images'])):
+                with self.assertRaises(ValueError):
+                    validate_promotion(invalid)
+
     def test_promotion_checks_chart_version_at_the_exact_clean_source_commit(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             chart = root / 'charts' / 'ottawa-fleet'
             chart.mkdir(parents=True)
-            (chart / 'Chart.yaml').write_text('apiVersion: v2\nname: ottawa-fleet\nversion: 1.2.3\n', encoding='utf-8')
+            (chart / 'Chart.yaml').write_text('apiVersion: v2\nname: ottawa-fleet\nversion: 0.1.0\n', encoding='utf-8')
             subprocess.run(['git', 'init', '-q', str(root)], check=True)
             subprocess.run(['git', '-C', str(root), 'add', '.'], check=True)
             subprocess.run(['git', '-C', str(root), '-c', 'user.name=Tests', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'release fixture'], check=True)

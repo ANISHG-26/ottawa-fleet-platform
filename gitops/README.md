@@ -15,10 +15,12 @@ cluster compromise. Use this setup only in the disposable local lab.
 
 The application has a tagged v0.1.0 build with six GHCR images and a chart
 package; see the [release contract](../docs/application-release-contract.md)
-for the exact source and trusted workflow. Default chart values intentionally
-omit image digests; CI values contain syntax-only placeholders. Promotion
-must use independently verified release metadata with the exact chart version,
-full source commit, six architecture-specific image references
+for the exact source and trusted workflow. The v0.2.0 chart adds the
+simulation-controller image and bounded runtime values. Default chart values
+intentionally omit image digests; CI values contain syntax-only placeholders.
+Promotion accepts either the six-image legacy contract or the seven-image
+contract with the simulation controller. Both require independently verified
+release metadata with the exact chart version, full source commit, architecture-specific image references
 with non-placeholder SHA-256 digests, each image's matching source commit, and
 the externally managed database Secret name. Check chart/schema compatibility
 and verify backward-compatible migrations before recording the previous
@@ -32,8 +34,16 @@ promotion, not evidence that a migration or rollback has succeeded.
 Create an operator-reviewed JSON input using actual release metadata. It has a
 `chart` object (`repository`, `name`, `version`), a `source` object (`repository`,
 `revision`), an `images` mapping for `dbInit`, `fleetApi`, `rideApi`, `worker`,
-`scenarioRunner` and `web` (each `reference`, `sourceCommit`, `architecture`),
-a `database.existingSecret` field and a `rollback` object containing
+`scenarioRunner` and `web` (each `reference`, `sourceCommit`, `architecture`).
+New chart promotions add `simulationController` with the same immutable image
+metadata. An optional top-level `runtime` object has exactly
+`simulationEnabled` (boolean), `fleetProfile` (`default-six` or `route20synthetic`), and
+`backgroundColor` (`green` or `blue`). Runtime settings require all seven images
+and chart version 0.2.0 or newer; enabling simulation requires `route20synthetic`.
+When present, these settings render only `simulation.enabled`,
+`simulation.fleetProfile`, and `web.backgroundColor` as Helm parameters. The
+default-six profile and disabled simulation remain chart defaults when runtime
+settings are omitted. A `database.existingSecret` field and a `rollback` object containing
 `previousCompatibleVersion` and `migrationBackwardCompatible`. The image
 source commit must match the chart source commit; the architecture must be
 explicit. See `scripts/promote_release.py` for exact checks.
@@ -52,6 +62,9 @@ commit, sends image digests, source commits and architecture metadata to Helm, u
 pre-existing database Secret, and targets only `fleet-app`. Commit the
 promotion as a reviewed change after the app artifacts and chart version have
 been independently verified. Argo reconciliation is a separate operator step.
+The [first application deployment runbook](../docs/runbooks/first-application-deployment.md)
+describes the reviewed promotion and smoke path. The green/blue theme value is
+a visual marker only; it does not enable advanced routing.
 
 The previous compatible version annotation is a rollback pointer, not proof
 that rollback works. A migration must be backward compatible and the prior

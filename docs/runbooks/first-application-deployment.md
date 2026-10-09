@@ -99,3 +99,9 @@ an OTLP endpoint is configured; the first chart deployment uses stdout logs and
 the existing metrics without adding a collector stack. See the application's
 [telemetry contract](https://github.com/ANISHG-26/ottawa-fleet-app/blob/main/docs/telemetry.md)
 for the asynchronous trace-context boundary.
+
+For the compact implementation-to-release review loop, see
+[platform contribution guidance](../../CONTRIBUTING.md#small-release-follow-through).
+Append dated measured outcomes under
+[deployment acceptance](../acceptance/first-application-deployment.md); keep
+private lease credentials and unredacted logs outside this repository.

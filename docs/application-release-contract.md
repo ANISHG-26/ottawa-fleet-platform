@@ -56,7 +56,11 @@ The green/blue background is a visual release marker. It does not activate
 advanced traffic routing or change how requests are routed. The
 [first application deployment runbook](runbooks/first-application-deployment.md)
 covers the trusted release, reviewed platform pin, Argo sync and workload
-smoke sequence. The CI workflow provisions infrastructure and bootstraps Argo;
-it does not establish that a live server is healthy or reproduce the complete
-application/LGTM deployment. Follow the [on-demand CI runbook](runbooks/on-demand-ci.md)
-and keep these acceptance gates separate.
+smoke sequence. The CI workflow also prepares an automatic application stage:
+each fresh lab selects the highest stable tag with a successful trusted build,
+then verifies and pins that release before Argo deployment. This disposable-lab
+policy is separate from reviewed manual promotions; it does not update a running
+lab when a newer tag appears. Its scripts and offline checks do not establish
+fresh-cluster deployment acceptance, monitoring installation, drift or rollback.
+Follow the [on-demand CI runbook](runbooks/on-demand-ci.md) and keep these
+acceptance gates separate.

@@ -231,6 +231,7 @@ class CiLabContractTests(unittest.TestCase):
              patch.object(ci_lab, "_upload", side_effect=upload), \
              patch.object(ci_lab, "acquire_active_lease", return_value=("12345", False)), \
              patch.object(ci_lab, "_create_task", side_effect=register), \
+             patch("scripts.ci_application.deploy", side_effect=lambda **kwargs: events.append(("application", kwargs["cluster"])) or {"tag": "v0.2.1", "sha": "a" * 40}), \
              patch.object(ci_lab, "datetime") as dt:
             dt.now.return_value = now + timedelta(minutes=2)
             dt.fromisoformat = datetime.fromisoformat
@@ -239,12 +240,42 @@ class CiLabContractTests(unittest.TestCase):
         upload_events = [event for event in events if event[0] == "upload"]
         task_index = next(i for i, event in enumerate(events) if event[0] == "task")
         apply_index = next(i for i, event in enumerate(events) if event[0] == "command" and event[1][0:2] == ["terraform", "apply"])
+        bootstrap_index = next(i for i, event in enumerate(events) if event[0] == "command" and "scripts.gcp_lab" in event[1] and "bootstrap" in event[1])
+        application_index = next(i for i, event in enumerate(events) if event[0] == "application")
         self.assertEqual(len(upload_events), 4)
         self.assertLess(max(i for i, e in enumerate(events) if e[0] == "upload"), task_index)
         self.assertLess(task_index, apply_index)
+        self.assertLess(bootstrap_index, application_index)
         self.assertIn("gs://private-state-bucket/gcp-lab/runs/37131621545/source.tgz", [event[1] for event in upload_events])
         self.assertTrue(all(not path.is_relative_to(source_root) for path in private_paths))
         self.assertEqual(result["task"], "fleet-r37131621545")
+        self.assertEqual(result["application"]["tag"], "v0.2.1")
+
+    def test_application_failure_uses_existing_cleanup_backstop(self):
+        source_root = Path(__file__).resolve().parents[1]
+        head = __import__("subprocess").run(["git", "rev-parse", "HEAD"], cwd=source_root,
+                                            capture_output=True, text=True, check=True).stdout.strip()
+        env = environment()
+        env["GITHUB_SHA"] = head
+        run_start = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+        commands = []
+        with patch.object(ci_lab, "fetch_run_started_at", return_value=run_start), \
+             patch.object(ci_lab, "create_source_archive", side_effect=lambda *, output_path, **kw: (Path(output_path).write_bytes(b"archive") or Path(output_path))), \
+             patch.object(ci_lab, "_upload"), patch.object(ci_lab, "acquire_active_lease", return_value=("12345", False)), \
+             patch.object(ci_lab, "_create_task"), patch("scripts.ci_application.deploy", side_effect=RuntimeError("app release rejected")), \
+             patch.object(ci_lab, "datetime") as dt:
+            dt.now.return_value = datetime.fromisoformat(run_start) + timedelta(minutes=1)
+            dt.fromisoformat = datetime.fromisoformat
+            def runner(command, **kwargs):
+                commands.append(list(command))
+                class Result:
+                    returncode = 0
+                    stdout = "token" if command[:3] == ["gcloud", "auth", "print-access-token"] else ""
+                    stderr = ""
+                return Result()
+            with self.assertRaisesRegex(RuntimeError, "app release rejected"):
+                ci_lab.run_pipeline(env, runner=runner, source_root=source_root)
+        self.assertTrue(any(command[:3] == ["gcloud", "tasks", "run"] and "fleet-r37131621545" in command for command in commands))
 
     def test_apply_failure_runs_same_registered_expiry_task_immediately(self):
         source_root = Path(__file__).resolve().parents[1]

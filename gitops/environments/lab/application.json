@@ -1,0 +1,174 @@
+{
+  "apiVersion": "argoproj.io/v1alpha1",
+  "kind": "Application",
+  "metadata": {
+    "name": "ottawa-fleet",
+    "namespace": "argocd",
+    "labels": {
+      "platform.ottawa-fleet/owner": "gitops"
+    }
+  },
+  "spec": {
+    "project": "ottawa-fleet",
+    "source": {
+      "repoURL": "https://github.com/ANISHG-26/ottawa-fleet-app.git",
+      "targetRevision": "0be20d8936968a8757b9663f207dd7f968597549",
+      "path": "charts/ottawa-fleet",
+      "helm": {
+        "parameters": [
+          {
+            "name": "images.worker.repository",
+            "value": "ghcr.io/anishg-26/ottawa-fleet-app/assignment-worker"
+          },
+          {
+            "name": "images.dbInit.repository",
+            "value": "ghcr.io/anishg-26/ottawa-fleet-app/db-init"
+          },
+          {
+            "name": "images.fleetApi.repository",
+            "value": "ghcr.io/anishg-26/ottawa-fleet-app/fleet-api"
+          },
+          {
+            "name": "images.rideApi.repository",
+            "value": "ghcr.io/anishg-26/ottawa-fleet-app/ride-api"
+          },
+          {
+            "name": "images.scenarioRunner.repository",
+            "value": "ghcr.io/anishg-26/ottawa-fleet-app/scenario-runner"
+          },
+          {
+            "name": "images.simulationController.repository",
+            "value": "ghcr.io/anishg-26/ottawa-fleet-app/simulation-controller"
+          },
+          {
+            "name": "images.web.repository",
+            "value": "ghcr.io/anishg-26/ottawa-fleet-app/web"
+          },
+          {
+            "name": "images.worker.digest",
+            "value": "sha256:54957e63899f762178210319cd4ee52f3e94321bdf91024a3e984709e31ef7c4"
+          },
+          {
+            "name": "images.dbInit.digest",
+            "value": "sha256:fca7245cb451ef1a2783dd8a89c95eed13d97ce128920da50f450d8b7ec9cab4"
+          },
+          {
+            "name": "images.fleetApi.digest",
+            "value": "sha256:1f62b28ad216807780137531c056b54a035f6f4b47140842d49cb477225d9d86"
+          },
+          {
+            "name": "images.rideApi.digest",
+            "value": "sha256:adf63db95c61aecbfb357b628ad664af29d988a40903350ac5930211cc1dc86d"
+          },
+          {
+            "name": "images.scenarioRunner.digest",
+            "value": "sha256:d7527167d7cf609a513bbb914a532b399c2e854993542eb4487e5d7bf4170473"
+          },
+          {
+            "name": "images.simulationController.digest",
+            "value": "sha256:6cfb7685a52b6ef21a8bbf9f7a2bbc9aa414824d99bf7cdc6625b0736be78736"
+          },
+          {
+            "name": "images.web.digest",
+            "value": "sha256:10e25b2e2116fe50547970ac7ffd5f943760d62e3f3cf20beafa1201bf36ce13"
+          },
+          {
+            "name": "images.worker.sourceCommit",
+            "value": "0be20d8936968a8757b9663f207dd7f968597549"
+          },
+          {
+            "name": "images.dbInit.sourceCommit",
+            "value": "0be20d8936968a8757b9663f207dd7f968597549"
+          },
+          {
+            "name": "images.fleetApi.sourceCommit",
+            "value": "0be20d8936968a8757b9663f207dd7f968597549"
+          },
+          {
+            "name": "images.rideApi.sourceCommit",
+            "value": "0be20d8936968a8757b9663f207dd7f968597549"
+          },
+          {
+            "name": "images.scenarioRunner.sourceCommit",
+            "value": "0be20d8936968a8757b9663f207dd7f968597549"
+          },
+          {
+            "name": "images.simulationController.sourceCommit",
+            "value": "0be20d8936968a8757b9663f207dd7f968597549"
+          },
+          {
+            "name": "images.web.sourceCommit",
+            "value": "0be20d8936968a8757b9663f207dd7f968597549"
+          },
+          {
+            "name": "images.worker.architecture",
+            "value": "amd64"
+          },
+          {
+            "name": "images.dbInit.architecture",
+            "value": "amd64"
+          },
+          {
+            "name": "images.fleetApi.architecture",
+            "value": "amd64"
+          },
+          {
+            "name": "images.rideApi.architecture",
+            "value": "amd64"
+          },
+          {
+            "name": "images.scenarioRunner.architecture",
+            "value": "amd64"
+          },
+          {
+            "name": "images.simulationController.architecture",
+            "value": "amd64"
+          },
+          {
+            "name": "images.web.architecture",
+            "value": "amd64"
+          },
+          {
+            "name": "database.existingSecret",
+            "value": "ottawa-fleet-database"
+          },
+          {
+            "name": "simulation.enabled",
+            "value": "true"
+          },
+          {
+            "name": "simulation.fleetProfile",
+            "value": "route20synthetic"
+          },
+          {
+            "name": "web.backgroundColor",
+            "value": "green"
+          }
+        ]
+      }
+    },
+    "destination": {
+      "server": "https://kubernetes.default.svc",
+      "namespace": "fleet-app"
+    },
+    "syncPolicy": {
+      "automated": {
+        "prune": true,
+        "selfHeal": true
+      },
+      "syncOptions": [
+        "CreateNamespace=false"
+      ]
+    },
+    "info": [
+      {
+        "name": "chart-version",
+        "value": "0.2.0"
+      },
+      {
+        "name": "previous-compatible-version",
+        "value": "0.1.0"
+      }
+    ]
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "chart": {
+    "repository": "https://github.com/ANISHG-26/ottawa-fleet-app.git",
+    "name": "charts/ottawa-fleet",
+    "version": "0.2.0"
+  },
+  "source": {
+    "repository": "https://github.com/ANISHG-26/ottawa-fleet-app.git",
+    "revision": "0be20d8936968a8757b9663f207dd7f968597549"
+  },
+  "images": {
+    "worker": {
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/assignment-worker@sha256:54957e63899f762178210319cd4ee52f3e94321bdf91024a3e984709e31ef7c4",
+      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "architecture": "amd64"
+    },
+    "dbInit": {
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/db-init@sha256:fca7245cb451ef1a2783dd8a89c95eed13d97ce128920da50f450d8b7ec9cab4",
+      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "architecture": "amd64"
+    },
+    "fleetApi": {
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/fleet-api@sha256:1f62b28ad216807780137531c056b54a035f6f4b47140842d49cb477225d9d86",
+      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "architecture": "amd64"
+    },
+    "rideApi": {
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/ride-api@sha256:adf63db95c61aecbfb357b628ad664af29d988a40903350ac5930211cc1dc86d",
+      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "architecture": "amd64"
+    },
+    "scenarioRunner": {
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/scenario-runner@sha256:d7527167d7cf609a513bbb914a532b399c2e854993542eb4487e5d7bf4170473",
+      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "architecture": "amd64"
+    },
+    "simulationController": {
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/simulation-controller@sha256:6cfb7685a52b6ef21a8bbf9f7a2bbc9aa414824d99bf7cdc6625b0736be78736",
+      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "architecture": "amd64"
+    },
+    "web": {
+      "reference": "ghcr.io/anishg-26/ottawa-fleet-app/web@sha256:10e25b2e2116fe50547970ac7ffd5f943760d62e3f3cf20beafa1201bf36ce13",
+      "sourceCommit": "0be20d8936968a8757b9663f207dd7f968597549",
+      "architecture": "amd64"
+    }
+  },
+  "database": {
+    "existingSecret": "ottawa-fleet-database"
+  },
+  "rollback": {
+    "previousCompatibleVersion": "0.1.0",
+    "migrationBackwardCompatible": true
+  },
+  "runtime": {
+    "simulationEnabled": true,
+    "fleetProfile": "route20synthetic",
+    "backgroundColor": "green"
+  }
+}

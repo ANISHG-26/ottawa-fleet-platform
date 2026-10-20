@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Learning Guides"
+  short_description: "Refresh project guides, diagrams and short demos"
+  default_prompt: "Use $project-learning-guides to refresh our quick guide, architecture diagram and recorded scenarios against current evidence."

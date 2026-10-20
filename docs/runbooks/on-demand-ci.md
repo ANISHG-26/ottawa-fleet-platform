@@ -37,7 +37,10 @@ Main-only federation does not establish a human approval gate. Inspect the live 
 5. At expiry, Cloud Tasks invokes the Cloud Run function with only the run ID. The function loads and validates the stored identity and launches a run-scoped Cloud Build cleanup job. Short durable polling callbacks observe completion, reconcile duplicates and bound failed-build retries.
 6. Cleanup removes any exact gateway Service before cluster deletion, destroys only the run's Terraform state, and verifies owned resources are absent. Failure retains state and the lease for repair. Successful verification permits matching-generation lease release.
 
-The application stage is prepared with offline checks; its first automated live run remains to be tested. The earlier manual v0.2.1 deployment does not establish that this automatic stage works in a fresh lab. Monitoring installation, drift and rollback experiments remain separate. Keep any UI ingress restricted to the private reviewer `/32`.
+The application stage passed its first fresh automated live run on October 20,
+2026; see [dated acceptance](../acceptance/automatic-application-bootstrap.md).
+Monitoring installation, drift and rollback experiments remain separate. Keep
+any UI ingress restricted to the private reviewer `/32`.
 
 ## Automatic application stage
 

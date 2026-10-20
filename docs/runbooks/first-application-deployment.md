@@ -6,9 +6,10 @@ available or that a deployment has succeeded. Keep the application chart and
 images in the application repository and pin them from this platform repo.
 
 The [on-demand CI application stage](on-demand-ci.md#automatic-application-stage)
-prepares this deployment automatically for future fresh labs using the latest
-stable tag. Its first automated live run remains pending. The steps below remain
-the manual promotion and inspection path.
+prepares this deployment automatically for fresh labs using the latest stable
+tag. Its first fresh automatic run passed on October 20, 2026; see
+[dated acceptance](../acceptance/automatic-application-bootstrap.md). The steps
+below remain the manual promotion and inspection path.
 
 ## Release and review
 

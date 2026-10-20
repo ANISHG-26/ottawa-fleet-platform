@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from scripts.lab_cleanup import MAX_LAB_SECONDS, create_source_archive, write_run_inputs
+from scripts.lab_cleanup import ALLOWED_LAB_HOURS, DEFAULT_LAB_HOURS, create_source_archive, write_run_inputs
 from scripts.private_diagnostics import upload_failure_diagnostic
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,8 +37,16 @@ def validate_run_id(run_id: str) -> str:
     return run_id
 
 
-def expiry_from_run_start(started_at: str) -> tuple[str, str]:
+def parse_session_hours(value: object) -> int:
+    """Accept only the canonical values exposed by the dispatch choice input."""
+    if type(value) is not str or value not in {str(hours) for hours in ALLOWED_LAB_HOURS}:
+        raise ValueError("lab session hours must be one of 2, 4 or 6")
+    return int(value)
+
+
+def expiry_from_run_start(started_at: str, session_hours: str = str(DEFAULT_LAB_HOURS)) -> tuple[str, str]:
     """Derive the fixed deadline from GitHub's run_started_at value."""
+    hours = parse_session_hours(session_hours)
     if not isinstance(started_at, str):
         raise ValueError("Actions run_started_at is required")
     try:
@@ -48,7 +56,7 @@ def expiry_from_run_start(started_at: str) -> tuple[str, str]:
     if started.tzinfo is None or started.utcoffset() != timedelta(0):
         raise ValueError("Actions run_started_at must be a UTC timestamp")
     started = started.astimezone(timezone.utc)
-    expires = started + timedelta(seconds=MAX_LAB_SECONDS)
+    expires = started + timedelta(hours=hours)
     return (
         started.isoformat(timespec="seconds").replace("+00:00", "Z"),
         expires.isoformat(timespec="seconds").replace("+00:00", "Z"),
@@ -248,6 +256,11 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
                                  text=True, capture_output=True, check=True).stdout.strip()
     validate_dispatch(event_name, ref, revision, checked_out)
     run_id = validate_run_id(env["GITHUB_RUN_ID"])
+    session_hours = parse_session_hours(env.get("LAB_SESSION_HOURS", str(DEFAULT_LAB_HOURS)))
+    cleanup_max_hours = parse_session_hours(env.get("LAB_CLEANUP_MAX_SESSION_HOURS", str(DEFAULT_LAB_HOURS)))
+    if session_hours > cleanup_max_hours:
+        raise ValueError("selected session exceeds activated cleanup support; deploy the compatible shutdown function "
+                         "and set gcp-lab LAB_CLEANUP_MAX_SESSION_HOURS before selecting a longer session")
     project = env["GCP_PROJECT_ID"]
     bucket = env["LAB_STATE_BUCKET"]
     for name in ("LAB_TFVARS_JSON", "GCP_PROJECT_ID", "LAB_STATE_BUCKET", "LAB_TASK_LOCATION",
@@ -263,7 +276,7 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
         raise ValueError("configured GCP project must match the private reviewed Terraform project")
 
     started_at, expires_at = expiry_from_run_start(
-        fetch_run_started_at(env["GITHUB_API_URL"], env["GITHUB_REPOSITORY"], run_id)
+        fetch_run_started_at(env["GITHUB_API_URL"], env["GITHUB_REPOSITORY"], run_id), str(session_hours)
     )
     run_prefix = f"gcp-lab/runs/{run_id}"
     base_uri = f"gs://{bucket}/{run_prefix}"
@@ -318,13 +331,13 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
         _run(["terraform", "plan", "-input=false", f"-var-file={outputs['tfvars']}", f"-out={plan}"], cwd=terraform,
              runner=runner, diagnostic_prefix=diagnostic_prefix, stage="terraform-plan")
         if datetime.now(timezone.utc) >= datetime.fromisoformat(expires_at.replace("Z", "+00:00")):
-            raise RuntimeError("the fixed two-hour expiry elapsed before Terraform apply")
+            raise RuntimeError("the fixed session expiry elapsed before Terraform apply")
         apply_started = True
         _run(["terraform", "apply", "-input=false", str(plan)], cwd=terraform,
              runner=runner, diagnostic_prefix=diagnostic_prefix, stage="terraform-apply")
 
         if datetime.now(timezone.utc) >= datetime.fromisoformat(expires_at.replace("Z", "+00:00")):
-            raise RuntimeError("the fixed two-hour expiry elapsed before cluster bootstrap")
+            raise RuntimeError("the fixed session expiry elapsed before cluster bootstrap")
         kubeconfig = work / "kubeconfig"
         _run(["python", "-m", "scripts.gcp_lab", "bootstrap", "--project", project,
               "--zone", json.loads(env["LAB_TFVARS_JSON"])["zone"],
@@ -332,7 +345,7 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
              cwd=source_root, runner=runner, diagnostic_prefix=diagnostic_prefix,
              stage="cluster-bootstrap")
         if datetime.now(timezone.utc) >= datetime.fromisoformat(expires_at.replace("Z", "+00:00")):
-            raise RuntimeError("the fixed two-hour expiry elapsed before application deployment")
+            raise RuntimeError("the fixed session expiry elapsed before application deployment")
         from scripts.ci_application import deploy as deploy_application
         private_tfvars = json.loads(Path(outputs["tfvars"]).read_text(encoding="utf-8"))
         app_release = deploy_application(
@@ -341,7 +354,7 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
             template_path=source_root / "gitops" / "environments" / "lab" / "application.json",
             runner=runner,
         )
-        return {"run_id": run_id, "expires_at": expires_at, "task": f"fleet-r{run_id}",
+        return {"run_id": run_id, "session_hours": session_hours, "expires_at": expires_at, "task": f"fleet-r{run_id}",
                 "application": app_release}
     except Exception:
         if task_registered:
@@ -368,10 +381,13 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
 def main() -> int:
     try:
         result = run_pipeline()
-        print(f"Provisioned bounded CI lab run {result['run_id']}; scheduled expiry {result['expires_at']}.")
+        print(f"Provisioned bounded CI lab run {result['run_id']}; "
+              f"{result['session_hours']}-hour session, scheduled expiry {result['expires_at']}.")
         if result.get("application"):
             release = result["application"]
             summary = [f"## Lab application deployment", "",
+                       f"- Session: {result['session_hours']} hours from Actions run start",
+                       f"- Fixed expiry: `{result['expires_at']}`",
                        f"- Release: `{release['tag']}` at `{release['sha']}`",
                        f"- Trusted release workflow run: `{release['run_id']}`",
                        "- Immutable image digests:"]

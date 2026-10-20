@@ -32,7 +32,7 @@ flowchart TB
     Workloads --> SQL
     Operator["Operator browser"] --> Forward["Private loopback<br/>port forward"]
     Forward --> Workloads
-    Dispatch --> Expiry["Register two-hour expiry<br/>before provisioning"]
+    Dispatch --> Expiry["Register 2 / 4 / 6-hour expiry<br/>before provisioning"]
     Expiry --> Task["Cloud Tasks"]
     Task --> Shutdown["Authenticated<br/>shutdown function"]
     Shutdown --> Cleanup["Cloud Build<br/>exact-run Terraform cleanup"]
@@ -45,6 +45,13 @@ run's cloud resources even after the GitHub runner exits. A retained network and
 automation foundation are separate from each disposable run. The active-run
 lease prevents overlapping labs. Existing labs keep their pinned release;
 new stable tags are selected on the next fresh dispatch.
+
+**Starting a session:** Actions → **Bounded GCP lab** → **Run workflow** on
+`main` → choose **2**, **4** or **6** hours. The default is 2. Time includes
+provisioning, and cleanup starts at the fixed deadline; deletion can take longer.
+Longer choices require the compatible shutdown function and its activation
+setting first; see [session setup](docs/runbooks/on-demand-ci.md#session-duration-and-cleanup-activation).
+This choice creates a new session; it does not extend an existing run.
 
 ## Current / next / later
 

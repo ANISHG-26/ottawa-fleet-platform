@@ -10,7 +10,9 @@ import subprocess
 import tarfile
 from pathlib import Path
 
-MAX_LAB_SECONDS = 2 * 60 * 60
+ALLOWED_LAB_HOURS = (2, 4, 6)
+DEFAULT_LAB_HOURS = 2
+MAX_LAB_SECONDS = max(ALLOWED_LAB_HOURS) * 60 * 60
 _REVISION = re.compile(r"^[a-f0-9]{40}$")
 # `fleet-lab-r` uses 11 characters; Terraform/GKE names cap at 24.
 _RUN_ID = re.compile(r"^[0-9]{8,13}$")
@@ -59,8 +61,8 @@ def validate_cleanup_request(request: object) -> dict:
 
     started = _utc_timestamp(request["started_at"], "started_at")
     expires = _utc_timestamp(request["expires_at"], "expires_at")
-    if expires - started != timedelta(seconds=MAX_LAB_SECONDS):
-        raise ValueError("expires_at must be exactly two hours after started_at")
+    if expires - started not in {timedelta(hours=hours) for hours in ALLOWED_LAB_HOURS}:
+        raise ValueError("expires_at must be exactly 2, 4 or 6 hours after started_at")
     return request
 
 

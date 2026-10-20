@@ -27,7 +27,7 @@ class LabCleanupContractTests(unittest.TestCase):
         self.assertTrue(resolved[4].startswith(r"C:\GoogleCloudSDK\bin\gcloud.cmd"))
         self.assertIn("clusters list", resolved[4])
 
-    def test_expiry_is_bound_to_one_immutable_run_and_exactly_two_hours(self):
+    def test_expiry_is_bound_to_one_immutable_run_and_an_approved_duration(self):
         started = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
         valid = {
             "run_id": "37131621545",

@@ -2,7 +2,8 @@
 from datetime import datetime, timedelta, timezone
 import re
 
-MAX_LAB_SECONDS = 7200
+ALLOWED_LAB_HOURS = (2, 4, 6)
+MAX_LAB_SECONDS = max(ALLOWED_LAB_HOURS) * 60 * 60
 _RUN_ID = re.compile(r"^[0-9]{8,13}$")
 _REVISION = re.compile(r"^[a-f0-9]{40}$")
 
@@ -33,6 +34,6 @@ def validate_cleanup_request(request: object) -> dict:
         if dt.tzinfo is None or dt.utcoffset() != timedelta(0):
             raise ValueError(f"{key} must be UTC ISO-8601")
         parsed.append(dt.astimezone(timezone.utc))
-    if parsed[1] - parsed[0] != timedelta(seconds=MAX_LAB_SECONDS):
-        raise ValueError("expiry must be exactly two hours after start")
+    if parsed[1] - parsed[0] not in {timedelta(hours=hours) for hours in ALLOWED_LAB_HOURS}:
+        raise ValueError("expiry must be exactly 2, 4 or 6 hours after start")
     return request

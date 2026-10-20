@@ -2,6 +2,16 @@ name: Bounded GCP lab
 
 on:
   workflow_dispatch:
+    inputs:
+      session_hours:
+        description: 'Lab session hours (includes provisioning; cleanup starts at expiry)'
+        type: choice
+        required: true
+        default: '2'
+        options:
+          - '2'
+          - '4'
+          - '6'
 
 permissions:
   contents: read
@@ -29,7 +39,7 @@ jobs:
           persist-credentials: false
 
       - name: Check stable release selection and bounded lab orchestration
-        run: python3 -m unittest tests.test_ci_application tests.test_ci_lab
+        run: python3 -m unittest tests.test_ci_application tests.test_ci_lab tests.test_lab_session_duration
 
       - name: Mask private input fields before cloud authentication
         run: python3 -m scripts.ci_log_masks
@@ -68,6 +78,8 @@ jobs:
       - name: Upload private run inputs, register expiry, then provision
         run: python3 -m scripts.ci_lab
         env:
+          LAB_SESSION_HOURS: ${{ inputs.session_hours || '2' }}
+          LAB_CLEANUP_MAX_SESSION_HOURS: ${{ vars.LAB_CLEANUP_MAX_SESSION_HOURS || '2' }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           LAB_STATE_BUCKET: ${{ secrets.LAB_STATE_BUCKET }}
           LAB_TFVARS_JSON: ${{ secrets.LAB_TFVARS_JSON }}

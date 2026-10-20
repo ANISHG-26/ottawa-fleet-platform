@@ -121,6 +121,17 @@ class FakeBackend:
 
 
 class ShutdownTests(unittest.TestCase):
+    def test_long_session_requests_dispatch_exact_run_cleanup(self):
+        for hours in (4, 6):
+            with self.subTest(hours=hours):
+                backend = FakeBackend()
+                request = dict(REQUEST, expires_at=f"2026-10-03T{12 + hours:02}:00:00Z")
+                backend.objects[f"{PREFIX}/request.json"] = json.dumps(request).encode()
+                body, status = shutdown.dispatch(RUN_ID, backend)
+                self.assertEqual((status, body['state']), (202, 'running'))
+                self.assertEqual(len(backend.created), 1)
+                self.assertEqual(backend.created[0][1], RUN_ID)
+
     def test_rest_collection_not_found_never_launches_or_releases_cleanup(self):
         class Response:
             status_code = 404

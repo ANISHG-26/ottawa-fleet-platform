@@ -105,6 +105,10 @@ class CiLabContractTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "another CI lab run"):
             ci_lab.acquire_active_lease(bucket="private-state-bucket", request=other,
                                         token="token", opener=opener)
+        changed_duration = dict(request, expires_at="2026-10-03T18:00:00Z")
+        with self.assertRaisesRegex(RuntimeError, "another CI lab run"):
+            ci_lab.acquire_active_lease(bucket="private-state-bucket", request=changed_duration,
+                                        token="token", opener=opener)
 
     def test_cleanup_source_archive_is_compressed_and_allowlisted(self):
         import io
@@ -283,6 +287,8 @@ class CiLabContractTests(unittest.TestCase):
                                             capture_output=True, text=True, check=True).stdout.strip()
         env = environment()
         env["GITHUB_SHA"] = head
+        env["LAB_SESSION_HOURS"] = "6"
+        env["LAB_CLEANUP_MAX_SESSION_HOURS"] = "6"
         run_start = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
         commands = []
         with patch.object(ci_lab, "fetch_run_started_at", return_value=run_start), \

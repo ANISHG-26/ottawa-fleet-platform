@@ -10,7 +10,43 @@ Terraform uses private Google Cloud Storage objects (blobs), rather than Git or 
 
 Keep foundation and automation state in separate prefixes under the operator's private backend. Keep CI run state in a separate private bucket, with `gcp-lab/runs/<GitHubRunID>` as the backend prefix. CI identities have no grants on the manual state bucket. The retained foundation owns the VPC/PSA peering; each run owns its subnet, NAT/router, GKE and Cloud SQL resources. Private Services Access producer cleanup can delay network deletion for days, so per-run teardown must not attempt to destroy that foundation.
 
-Fixed subnet ranges allow only one live CI lab in this VPC. A conditional-create GCS active-run lease spans the full lab lifetime; Actions concurrency alone is insufficient because provisioning finishes before the two-hour expiry. Release the lease only after successful exact-run teardown verification. An interrupted runner before expiry registration can leave a lease with no paid resources; an operator must inspect its exact run inventory before clearing it. Never delete an unverified lease to force another deployment.
+Fixed subnet ranges allow only one live CI lab in this VPC. A conditional-create GCS active-run lease spans the full lab lifetime; Actions concurrency alone is insufficient because provisioning finishes before the selected session expiry. Release the lease only after successful exact-run teardown verification. An interrupted runner before expiry registration can leave a lease with no paid resources; an operator must inspect its exact run inventory before clearing it. Never delete an unverified lease to force another deployment.
+
+## Session duration and cleanup activation
+
+In Actions, open **Bounded GCP lab**, choose **Run workflow** on `main`, and
+select **2**, **4** or **6** hours under **Lab session hours**. The default is 2.
+The deadline is the original Actions run start plus that duration, including
+provisioning. It is written once into the cleanup request, Terraform inputs and
+expiry task, and the app readiness wait respects it. Retrying the same run with
+a changed duration fails its immutable lease check; it does not extend the lab.
+
+The retained shutdown function runs a separately deployed validator. Before
+activating longer sessions, update that function from this reviewed source:
+
+1. Package `main.py`, `scripts_validator.py` and `requirements.txt` from
+   `functions/lab_shutdown/` at the reviewed revision into the private source ZIP
+   used by `terraform/automation` (`function_source_zip_path`). Do not reuse an older
+   bundle that only accepts two-hour requests.
+2. Review/apply the existing automation root's plan for the new function source
+   and verify that the deployed function uses the compatible bundle. This does
+   not dispatch a new lab. The validator remains compatible with existing
+   two-hour requests and accepts only exact two-, four- or six-hour intervals.
+3. In the repository's **gcp-lab environment variables**, set
+   `LAB_CLEANUP_MAX_SESSION_HOURS` to `6`. This non-secret setting is the
+   operator's activation acknowledgement, not automatic runtime discovery.
+   Leave it unset or set to `2` until the function update is verified.
+
+The workflow defaults the activation setting to 2 and rejects longer choices
+before uploading inputs or provisioning resources. A value of 4 permits only
+2/4-hour selections; unsupported values fail closed. Set it back to 2 before
+rolling the function back to an older two-hour-only bundle.
+
+The hosted runner still exits after provisioning; selecting six hours does not
+keep a GitHub job running for six hours. Cloud resources remain until cleanup.
+At the same resource shape, four/six hours schedule roughly twice/three times
+the resource time of two hours. Actual usage also includes deletion and retries;
+the deadline is not a hard billing cap.
 
 Separate state does not establish complete IAM isolation: the initial deployment and cleanup identities have project-wide GKE/Cloud SQL administration, and subnet/router permissions are also project-wide. They can affect other project resources despite the reviewed code's exact selectors. Owner review must accept this authority or choose stronger isolation before activation. Storage object data permissions remain limited to CI run prefixes. Before function deployment, a conditional project IAM binding grants the function builder object-view access only to the `fleet-lab-shutdown/` copied-source prefix in the regional Cloud Run functions staging bucket; this can be installed before Google creates that bucket.
 
@@ -32,7 +68,7 @@ Main-only federation does not establish a human approval gate. Inspect the live 
 
 1. Dispatch the main-only workflow in the reviewed `gcp-lab` environment. Authenticate through short-lived GitHub OIDC/WIF, restricted to the exact repository/owner identities, branch, workflow and environment. The subject uses GitHub's immutable `repo:OWNER@OWNER-ID/REPO@REPO-ID:environment:gcp-lab` format. Verify the active prefix with `gh api repos/ANISHG-26/ottawa-fleet-platform/actions/oidc/customization/sub` before activation; do not relax the condition to work around a format mismatch.
 2. Derive the run ID and source SHA from GitHub and the deadline from the Actions run start, not the provisioning step's clock. Store immutable private run inputs and cleanup source in GCS. Acquire the run lease before mutations.
-3. Register an authenticated Cloud Task for exactly start plus two hours before Terraform apply. Failure to register prevents provisioning. On provisioning failure, request immediate delivery of that same task; its durable schedule is the independent backstop.
+3. Register an authenticated Cloud Task for exactly start plus the selected 2, 4 or 6 hours before Terraform apply. Failure to register prevents provisioning. On provisioning failure, request immediate delivery of that same task; its durable schedule is the independent backstop.
 4. Terraform initializes its unique GCS backend, plans/applies the reviewed one-node/private-SQL shape in the retained network, then bootstraps Argo using an exact DNS-endpoint kubeconfig outside the checkout. The application stage selects and verifies the latest stable application release, prepares the database Secret privately, and applies its pinned Argo Application. See the application stage below.
 5. At expiry, Cloud Tasks invokes the Cloud Run function with only the run ID. The function loads and validates the stored identity and launches a run-scoped Cloud Build cleanup job. Short durable polling callbacks observe completion, reconcile duplicates and bound failed-build retries.
 6. Cleanup removes any exact gateway Service before cluster deletion, destroys only the run's Terraform state, and verifies owned resources are absent. Failure retains state and the lease for repair. Successful verification permits matching-generation lease release.
@@ -70,7 +106,7 @@ Argo's exact synced source, five available deployments, and read-only web runtim
 fleet inventory, route and Ride readiness responses through the Kubernetes
 service proxy. A passenger trip journey remains part of later live acceptance.
 Failures use the existing exact-run cleanup backstop. It does not extend the
-two-hour expiry or claim automatic database
+selected session expiry or claim automatic database
 rollback compatibility for future releases. UI access continues through the
 documented operator port forward; this stage adds no public ingress.
 
@@ -78,4 +114,4 @@ The instance owns the disposable SQL database and user. Their provider deletion 
 
 ## Evidence required before activation is accepted
 
-Record the GitHub run, source SHA, exact state prefix, registered task deadline, function/build identities, GKE/SQL provisioning, bootstrap health, actual cleanup completion and residual-resource inventory. Test early delivery of the exact task as a shortened-expiry exercise without changing the production two-hour rule; repeat delivery must be harmless. Verify the manual lab remains up and its state remains untouched. Do not infer cleanup from an empty console billing chart or an accepted task alone.
+Record the GitHub run, source SHA, selected session hours, exact state prefix, registered task deadline, function/build identities, GKE/SQL provisioning, bootstrap health, actual cleanup completion and residual-resource inventory. Test early delivery of the exact task as a shortened-expiry exercise without changing the selected session deadline; repeat delivery must be harmless. Verify the manual lab remains up and its state remains untouched. Do not infer cleanup from an empty console billing chart or an accepted task alone.

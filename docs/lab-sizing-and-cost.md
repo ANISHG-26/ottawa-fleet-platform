@@ -47,7 +47,7 @@ All figures below are USD list-price estimates, before tax, trial credits, accou
 
 `lab hours/month = 8.667 × 2 = 17.333 hours`
 
-The two-hour expiry starts from the Actions run start, including provisioning time. Teardown starts at expiry; API deletion and retries take additional time. This is not a hard billing cap. Immediate failure cleanup and a durable independent expiry execution are required; the implementation and real shortened-expiry test must pass before claiming automatic teardown works.
+The two-hour baseline below starts from the Actions run start, including provisioning time. CI also offers four- and six-hour choices once the compatible cleanup service is activated; see [session setup](runbooks/on-demand-ci.md#session-duration-and-cleanup-activation). Teardown starts at the selected expiry; API deletion and retries take additional time. This is not a hard billing cap. Immediate failure cleanup and a durable independent expiry execution are required; the implementation and real shortened-expiry test must pass before claiming automatic teardown works.
 
 | Cost component | Rate and quantity | Estimated monthly cost |
 |---|---|---:|

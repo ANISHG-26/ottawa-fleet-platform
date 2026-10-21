@@ -75,13 +75,15 @@ Main-only federation does not establish a human approval gate. Inspect the live 
 
 The application stage passed its first fresh automated live run on October 20,
 2026; see [dated acceptance](../acceptance/automatic-application-bootstrap.md).
-Monitoring installation, drift and rollback experiments remain separate. Keep
-any UI ingress restricted to the private reviewer `/32`.
+That historical run did not install monitoring. The automatic LGTM stage below
+adds it to new provisioning; fresh live acceptance of that stage remains to be
+recorded after the application release and platform changes are activated.
+Drift and rollback remain separate experiments. UI access uses private forwards.
 
 ## Automatic application stage
 
 Each dispatch resolves the highest stable `vMAJOR.MINOR.PATCH` application tag,
-at or above `v0.2.1`, once. Prereleases are excluded. The selected tag must have
+at or above `v0.2.2`, once. Prereleases are excluded. The selected tag must have
 a successful `release.yml` push run for its exact source commit. A missing,
 unfinished or failed latest release stops deployment; the stage does not
 silently substitute an older release.
@@ -96,7 +98,10 @@ The run's private Terraform outputs and stored password prepare
 `ottawa-fleet-database` in `fleet-app`. Secret values go through captured stdin,
 never command arguments or public evidence. Argo receives an exact chart source
 SHA and seven image digests, with simulation enabled, the 20-vehicle synthetic
-profile and a green background. Later app tags are selected on the next fresh
+profile, a green background, and the supported `telemetry.enabled=true` and
+`telemetry.otlpEndpoint=http://alloy.observability.svc.cluster.local:4318`
+chart values. Older charts are rejected before unsupported settings are applied.
+Later app tags are selected on the next fresh
 lab dispatch; an existing lab does not follow a floating tag.
 
 The workflow records the selected tag, source commit, trusted release run and
@@ -109,6 +114,54 @@ Failures use the existing exact-run cleanup backstop. It does not extend the
 selected session expiry or claim automatic database
 rollback compatibility for future releases. UI access continues through the
 documented operator port forward; this stage adds no public ingress.
+
+## Automatic LGTM stage and access
+
+After application readiness, `scripts.ci_telemetry` applies the existing five
+single-replica monitoring components through `observability/ci`. It checks live
+node requests against allocatable CPU/memory, reserving 400m CPU / 1,056 MiB for
+monitoring plus 50m / 64 MiB for one web rolling-update surge. Unexpected or
+over-budget monitoring pods fail the preflight. It never increases node size or
+count. Existing per-component resource quotas and ephemeral storage bounds apply.
+
+The stage creates `observability/grafana-admin` with a random per-lab password
+through captured stdin. It reuses an existing CI-owned Secret on retry, and
+refuses an unowned or malformed credential. No retained Secret Manager IAM
+permission or static password in GitHub is required. Alloy gets only the existing
+namespace-scoped application pod/log access. Application trace export uses the
+chart contract, without manual environment patches or Argo ignore exceptions.
+
+All five deployments must become available. A temporary loopback-only forward
+then authenticates to Grafana, verifies the three provisioned data sources,
+checks all three application scrape targets are up, and requires nonempty
+metrics, logs and trace query results. Read-only Fleet/Ride requests generate
+fresh log and trace observations; no rides or simulation runs are created.
+Pod readiness alone cannot pass this gate. All waits share an eight-minute cap
+and the original lab expiry, whichever is sooner. Failure requests the same
+registered exact-run cleanup task used by application failures.
+
+Use the exact lab kubeconfig/context prepared for the application UI:
+
+```powershell
+kubectl --kubeconfig <owned-lab-kubeconfig> --context <owned-lab-context> -n observability port-forward service/grafana 13000:3000 --address=127.0.0.1
+```
+
+Open `http://127.0.0.1:13000/grafana/` and sign in as `admin`. Privately retrieve
+the base64-encoded `data.password` from the exact lab's `grafana-admin` Secret
+using `kubectl get secret grafana-admin -n observability -o json`; decode it
+locally. Keep it out of screenshots, logs, issue bodies and commits.
+
+The CI overlay serves HTTP with non-Secure cookies for this loopback forward;
+the service stays ClusterIP and has no public ingress or anonymous login. The
+manual HTTPS gateway configuration remains separate. Do not expose this overlay
+through a public gateway. Grafana state, passwords and telemetry history are
+ephemeral and are removed with the lab cluster.
+
+Activation order is important: merge the app chart setting, publish and verify
+its trusted `v0.2.2` (or newer) seven-image release, then merge this platform
+integration. A new user-dispatched lab must verify the whole path before live
+fresh-provisioning acceptance is recorded. Do not extend or replace an existing
+lab merely to make this documentation claim pass.
 
 The instance owns the disposable SQL database and user. Their provider deletion policy is `ABANDON`: Terraform removes those child entries from state and then deletes the instance, which removes its databases and users. This avoids separate database/user drops being blocked by active connections or table ownership. Cleanup still fails if the instance survives; abandoning the child entries does not establish successful teardown.
 

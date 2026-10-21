@@ -62,5 +62,12 @@ then verifies and pins that release before Argo deployment. This disposable-lab
 policy is separate from reviewed manual promotions; it does not update a running
 lab when a newer tag appears. Its scripts and offline checks do not establish
 fresh-cluster deployment acceptance, monitoring installation, drift or rollback.
-Follow the [on-demand CI runbook](runbooks/on-demand-ci.md) and keep these
-acceptance gates separate.
+Automatic LGTM labs require app chart release v0.2.2 or newer. That chart exposes
+`telemetry.enabled` and `telemetry.otlpEndpoint` for Fleet API, Ride API and the
+assignment worker; default-disabled local/manual deployments remain compatible.
+The platform enables export to Alloy and installs the separate bounded stack.
+Provisioning must also pass authenticated three-signal Grafana queries, within
+the original lab lease. No broad Argo ignore rules or cloud Secret Manager
+access grants are introduced. Follow the
+[on-demand CI runbook](runbooks/on-demand-ci.md) for activation order and keep
+implemented checks separate from measured fresh-run acceptance.

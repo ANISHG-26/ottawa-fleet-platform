@@ -10,6 +10,18 @@ from scripts.ci_application import _run
 import subprocess
 
 class StableReleaseTests(unittest.TestCase):
+    def test_telemetry_requires_a_supported_release_and_sets_only_the_contract_values(self):
+        template = __import__('json').loads((Path(__file__).resolve().parents[1] / 'gitops/environments/lab/application.json').read_text())
+        sha = 'a' * 40
+        images = {key: {'reference': f'{GHCR}/{path}@sha256:{i:064x}', 'sourceCommit': sha, 'architecture': 'amd64'} for i, (key, path) in enumerate(IMAGE_PATHS.items(), start=1)}
+        with self.assertRaisesRegex(ValueError, 'telemetry'):
+            build_application('v0.2.1', sha, images, template, 'version: 0.2.1\n', telemetry_enabled=True)
+        app = build_application('v0.2.2', sha, images, template, 'version: 0.2.2\n', telemetry_enabled=True)
+        params = {p['name']: p['value'] for p in app['spec']['source']['helm']['parameters']}
+        self.assertEqual(params['telemetry.enabled'], 'true')
+        self.assertEqual(params['telemetry.otlpEndpoint'], 'http://alloy.observability.svc.cluster.local:4318')
+        self.assertNotIn('ignoreDifferences', app['spec'])
+
     def test_selects_highest_semver_stable_at_or_above_floor(self):
         tags = [{"name": value, "sha": "a" * 40} for value in ["v0.2.1", "v1.0.0-rc.1", "v0.9.0", "v0.10.0", "v0.2.0"]]
         self.assertEqual(select_latest_stable(tags)["name"], "v0.10.0")

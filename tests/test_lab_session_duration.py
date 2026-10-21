@@ -58,7 +58,7 @@ class LabSessionDurationTests(unittest.TestCase):
                 for call in (fetch, token, upload, task):
                     call.assert_not_called()
 
-    def test_selected_expiry_reaches_request_tfvars_task_and_app_without_drift(self):
+    def test_selected_expiry_reaches_request_tfvars_task_app_and_telemetry_without_drift(self):
         root = Path(__file__).resolve().parents[1]
         head = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root, capture_output=True, text=True, check=True).stdout.strip()
         start = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
@@ -89,13 +89,16 @@ class LabSessionDurationTests(unittest.TestCase):
                  patch.object(ci_lab, 'acquire_active_lease', return_value=('12345', False)), \
                  patch.object(ci_lab, '_upload', side_effect=upload), \
                  patch.object(ci_lab, '_create_task', side_effect=task), \
-                 patch('scripts.ci_application.deploy', side_effect=app):
+                 patch('scripts.ci_application.deploy', side_effect=app), \
+                 patch('scripts.ci_telemetry.deploy', return_value={'signals': ['metrics', 'logs', 'traces']}) as monitoring:
                 result = ci_lab.run_pipeline(env, runner=runner, source_root=root)
             expected = ci_lab.expiry_from_run_start(start, hours)[1]
             self.assertEqual(uploaded['cleanup-request.json']['expires_at'], expected)
             self.assertEqual(uploaded['terraform.tfvars.json']['teardown_deadline'], expected)
             self.assertEqual(tasks[0]['schedule_time'], expected)
             self.assertEqual(apps[0]['expires_at'], expected)
+            self.assertEqual(monitoring.call_args.kwargs['expires_at'], expected)
+            self.assertTrue(apps[0]['telemetry_enabled'])
             self.assertEqual(result['expires_at'], expected)
             self.assertEqual(result['session_hours'], int(hours))
             self.assertLess(events.index('task'), events.index('apply'))

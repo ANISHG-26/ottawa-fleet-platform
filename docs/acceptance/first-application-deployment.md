@@ -54,3 +54,35 @@ captures remain in private operator records.
 
 See the [first deployment runbook](../runbooks/first-application-deployment.md)
 for the repeatable release and verification procedure.
+
+## October 21, 2026: green-to-blue configuration rollout
+
+A later user-requested experiment exercised the color promotion in an already
+running disposable lab. Configuration commit
+[`122d2e8`](https://github.com/ANISHG-26/ottawa-fleet-platform/commit/122d2e8ed2ce0fce43b7b387def32e8d40947c47)
+changed only `runtime.backgroundColor` and its rendered `web.backgroundColor`
+parameter from `green` to `blue`. Chart v0.2.1 remained pinned to application
+source `f91147ce8b7cc997e2bebe371fcdec8a6cc630d2`, with the same seven image pins.
+
+The operator verified the exact lab lease and registered expiry, no active
+simulation, matching live release parameters, and a successful server-side dry
+run. A conditional JSON patch then copied the committed color parameter into
+the existing Argo Application. This explicit operator bridge did not apply
+unrelated Application metadata. Pushing the platform branch alone did not
+deploy it, and the PR remained unmerged during the experiment.
+
+| Observation | Measured result |
+|---|---|
+| Argo UI | Web became `OutOfSync`; automatic sync started. Verification observed `Synced / Progressing`, then `Synced / Healthy` with operation `Succeeded` at 17:51 UTC. |
+| Web rollout | Deployment revision advanced from 1 to 2 under `RollingUpdate` with the existing 25% surge/unavailable settings. The web pod was replaced; the other four application pod identities were unchanged. All five application containers were ready with zero restarts afterward. |
+| Runtime and image | The service's `/runtime-config.json` returned `backgroundColor: blue`. `/buildinfo` retained the same application source; the running web image remained `sha256:a5b820faaabafa848d0e12be2da5ed9eb942d6e49eb8833fb695526e2a75a44c`. |
+| Browser | After reconnecting the local forward to the replacement web pod and refreshing, the operator console visibly used the blue background and displayed 20 vehicles. |
+| Lifecycle | No additional infrastructure or expiry extension. The existing shutdown remained scheduled for 22:26:41 UTC. Teardown had not yet occurred at capture. |
+
+This measures a configuration rolling update. It does not establish blue-green
+traffic switching, drift correction, failed-release rollback, or a new
+application-version promotion. The historical green-only observation above
+describes the earlier lab. Detailed cluster identities and captures remain in
+private operator records; the focused change is tracked in
+[PR #49](https://github.com/ANISHG-26/ottawa-fleet-platform/pull/49), related to
+[issue #14](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/14).

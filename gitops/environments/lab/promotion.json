@@ -55,6 +55,6 @@
   "runtime": {
     "simulationEnabled": true,
     "fleetProfile": "route20synthetic",
-    "backgroundColor": "green"
+    "backgroundColor": "blue"
   }
 }

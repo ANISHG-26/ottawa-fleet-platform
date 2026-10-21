@@ -236,6 +236,7 @@ class CiLabContractTests(unittest.TestCase):
              patch.object(ci_lab, "acquire_active_lease", return_value=("12345", False)), \
              patch.object(ci_lab, "_create_task", side_effect=register), \
              patch("scripts.ci_application.deploy", side_effect=lambda **kwargs: events.append(("application", kwargs["cluster"])) or {"tag": "v0.2.1", "sha": "a" * 40}), \
+             patch("scripts.ci_telemetry.deploy", side_effect=lambda **kwargs: events.append(("telemetry", kwargs["cluster"])) or {"signals": ["metrics", "logs", "traces"]}), \
              patch.object(ci_lab, "datetime") as dt:
             dt.now.return_value = now + timedelta(minutes=2)
             dt.fromisoformat = datetime.fromisoformat
@@ -246,10 +247,13 @@ class CiLabContractTests(unittest.TestCase):
         apply_index = next(i for i, event in enumerate(events) if event[0] == "command" and event[1][0:2] == ["terraform", "apply"])
         bootstrap_index = next(i for i, event in enumerate(events) if event[0] == "command" and "scripts.gcp_lab" in event[1] and "bootstrap" in event[1])
         application_index = next(i for i, event in enumerate(events) if event[0] == "application")
+        telemetry_index = next(i for i, event in enumerate(events) if event[0] == "telemetry")
         self.assertEqual(len(upload_events), 4)
         self.assertLess(max(i for i, e in enumerate(events) if e[0] == "upload"), task_index)
         self.assertLess(task_index, apply_index)
         self.assertLess(bootstrap_index, application_index)
+        self.assertLess(application_index, telemetry_index)
+        self.assertEqual(result["telemetry"]["signals"], ["metrics", "logs", "traces"])
         self.assertIn("gs://private-state-bucket/gcp-lab/runs/37131621545/source.tgz", [event[1] for event in upload_events])
         self.assertTrue(all(not path.is_relative_to(source_root) for path in private_paths))
         self.assertEqual(result["task"], "fleet-r37131621545")
@@ -280,6 +284,25 @@ class CiLabContractTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "app release rejected"):
                 ci_lab.run_pipeline(env, runner=runner, source_root=source_root)
         self.assertTrue(any(command[:3] == ["gcloud", "tasks", "run"] and "fleet-r37131621545" in command for command in commands))
+
+    def test_telemetry_failure_uses_the_same_exact_run_cleanup(self):
+        import subprocess
+        root = Path(__file__).resolve().parents[1]
+        env = environment()
+        env['GITHUB_SHA'] = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=root, capture_output=True, text=True, check=True).stdout.strip()
+        commands = []
+        def runner(command, **kwargs):
+            commands.append(list(command))
+            return subprocess.CompletedProcess(command, 0, 'token' if command[:3] == ['gcloud', 'auth', 'print-access-token'] else '', '')
+        start = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+        with patch.object(ci_lab, 'fetch_run_started_at', return_value=start), \
+             patch.object(ci_lab, 'create_source_archive', side_effect=lambda *, output_path, **kw: (Path(output_path).write_bytes(b'archive') or Path(output_path))), \
+             patch.object(ci_lab, '_upload'), patch.object(ci_lab, 'acquire_active_lease', return_value=('12345', False)), \
+             patch.object(ci_lab, '_create_task'), patch('scripts.ci_application.deploy', return_value={'tag': 'v0.2.2'}), \
+             patch('scripts.ci_telemetry.deploy', side_effect=RuntimeError('telemetry unavailable')):
+            with self.assertRaisesRegex(RuntimeError, 'telemetry unavailable'):
+                ci_lab.run_pipeline(env, runner=runner, source_root=root)
+        self.assertTrue(any(c[:3] == ['gcloud', 'tasks', 'run'] and 'fleet-r37131621545' in c for c in commands))
 
     def test_apply_failure_runs_same_registered_expiry_task_immediately(self):
         source_root = Path(__file__).resolve().parents[1]

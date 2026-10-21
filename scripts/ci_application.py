@@ -34,14 +34,14 @@ def _version(tag: str):
     return tuple(map(int, match.groups())) if match else None
 
 
-def select_latest_stable(tags: list[dict]) -> dict:
+def select_latest_stable(tags: list[dict], minimum=MINIMUM) -> dict:
     candidates = []
     for tag in tags:
         version = _version(tag.get("name")) if isinstance(tag, dict) else None
-        if version and version >= MINIMUM:
+        if version and version >= minimum:
             candidates.append((version, tag))
     if not candidates:
-        raise ValueError("no stable application tag at or above v0.2.1 is available")
+        raise ValueError("no stable application tag at or above v" + '.'.join(map(str, minimum)) + " is available")
     selected = max(candidates, key=lambda item: item[0])[1]
     if not isinstance(selected.get("sha"), str) or not re.fullmatch(r"[a-f0-9]{40}", selected["sha"]):
         raise ValueError(f"latest stable application tag {selected.get('name')} has no exact Git SHA")
@@ -107,8 +107,8 @@ def resolve_tag_commit(tag: dict, api="https://api.github.com", *, opener=urlope
     return {"name": tag["name"], "sha": commit}
 
 
-def latest_release(api="https://api.github.com", *, opener=urlopen):
-    tag = resolve_tag_commit(select_latest_stable(fetch_tags(api, opener=opener)), api, opener=opener)
+def latest_release(api="https://api.github.com", *, opener=urlopen, minimum=MINIMUM):
+    tag = resolve_tag_commit(select_latest_stable(fetch_tags(api, opener=opener), minimum), api, opener=opener)
     run_list = _github_json(api, f"repos/{APP}/actions/workflows/release.yml/runs?event=push&branch={tag['name']}&per_page=100", opener=opener)
     runs = run_list.get("workflow_runs", []) if isinstance(run_list, dict) else []
     matching = [run for run in runs if isinstance(run, dict) and run.get("head_branch") == tag["name"] and run.get("head_sha") == tag["sha"]]
@@ -175,7 +175,7 @@ def inspect_image(name: str, tag: str, sha: str, *, opener=urlopen):
             "architecture": "amd64", "platformDigest": platform_digest}
 
 
-def build_application(tag: str, sha: str, digests: dict, template: dict, chart_text: str) -> dict:
+def build_application(tag: str, sha: str, digests: dict, template: dict, chart_text: str, *, telemetry_enabled=False) -> dict:
     version = _version(tag)
     if version is None or version < MINIMUM:
         raise ValueError("selected application tag is below the stable release floor")
@@ -184,6 +184,8 @@ def build_application(tag: str, sha: str, digests: dict, template: dict, chart_t
     chart_version = parse_chart_version(chart_match.group(1) if chart_match else "")
     if chart_version != tag[1:]:
         raise ValueError("app Helm chart version at the selected SHA does not match the selected tag")
+    if telemetry_enabled and version < (0, 2, 2):
+        raise ValueError("automated telemetry requires app chart release v0.2.2 or newer")
     if set(digests) != set(IMAGE_PATHS):
         raise ValueError("release must provide exactly the seven expected app images")
     app = json.loads(json.dumps(template))
@@ -209,14 +211,19 @@ def build_application(tag: str, sha: str, digests: dict, template: dict, chart_t
         {"name": "simulation.fleetProfile", "value": "route20synthetic"},
         {"name": "web.backgroundColor", "value": "green"},
     ]
+    if telemetry_enabled:
+        params += [
+            {"name": "telemetry.enabled", "value": "true"},
+            {"name": "telemetry.otlpEndpoint", "value": "http://alloy.observability.svc.cluster.local:4318"},
+        ]
     app["spec"]["source"]["path"] = "charts/ottawa-fleet"
     app["spec"]["source"]["helm"]["parameters"] = params
     app["spec"]["info"] = [{"name": "chart-version", "value": chart_version}]
     return app
 
 
-def resolve_application(template_path, *, api="https://api.github.com", opener=urlopen):
-    tag, run = latest_release(api, opener=opener)
+def resolve_application(template_path, *, api="https://api.github.com", opener=urlopen, telemetry_enabled=False):
+    tag, run = latest_release(api, opener=opener, minimum=(0, 2, 2) if telemetry_enabled else MINIMUM)
     version = tag["name"][1:]
     chart_url = f"https://raw.githubusercontent.com/{APP}/{tag['sha']}/charts/ottawa-fleet/Chart.yaml"
     request = Request(chart_url, headers={"Accept": "text/plain"})
@@ -227,7 +234,7 @@ def resolve_application(template_path, *, api="https://api.github.com", opener=u
     images = {name: inspect_image(name, tag["name"], tag["sha"], opener=opener) for name in IMAGE_PATHS}
     with open(template_path, encoding="utf-8") as source:
         template = json.load(source)
-    app = build_application(tag["name"], tag["sha"], images, template, chart_text)
+    app = build_application(tag["name"], tag["sha"], images, template, chart_text, telemetry_enabled=telemetry_enabled)
     return app, {"tag": tag["name"], "sha": tag["sha"], "run_id": run.get("id"),
                  "digests": {key: value["reference"].rsplit("@", 1)[1] for key, value in images.items()}}
 
@@ -245,7 +252,7 @@ def _run(command, *, runner=subprocess.run, cwd=None, input_text=None, timeout=6
 
 def deploy(*, project: str, zone: str, cluster: str, kubeconfig: str, expires_at: str,
            secret_values: dict, template_path, runner=subprocess.run, opener=urlopen,
-           sleep=time.sleep, now=lambda: datetime.now(timezone.utc)):
+           sleep=time.sleep, now=lambda: datetime.now(timezone.utc), telemetry_enabled=False):
     from scripts.gcp_lab import expected_context
     context = expected_context(project, zone, cluster)
     deadline = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
@@ -255,7 +262,7 @@ def deploy(*, project: str, zone: str, cluster: str, kubeconfig: str, expires_at
             raise RuntimeError("fixed lab expiry elapsed before application deployment step")
         return seconds
     remaining()
-    app, release = resolve_application(template_path, opener=opener)
+    app, release = resolve_application(template_path, opener=opener, telemetry_enabled=telemetry_enabled)
     env = dict(os.environ)
     env["KUBECONFIG"] = kubeconfig
     base = ["kubectl", f"--context={context}"]

@@ -39,7 +39,7 @@ jobs:
           persist-credentials: false
 
       - name: Check stable release selection and bounded lab orchestration
-        run: python3 -m unittest tests.test_ci_application tests.test_ci_lab tests.test_lab_session_duration
+        run: python3 -m unittest tests.test_ci_application tests.test_ci_lab tests.test_ci_telemetry tests.test_lab_session_duration
 
       - name: Mask private input fields before cloud authentication
         run: python3 -m scripts.ci_log_masks

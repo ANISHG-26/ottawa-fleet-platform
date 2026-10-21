@@ -52,6 +52,11 @@ No Docker registry pull, stack startup, data ingestion, dashboard query, end-to-
 
 ## Bounded single-node GKE stack
 
+For automatically provisioned CI labs, use the
+[automatic LGTM stage and access](on-demand-ci.md#automatic-lgtm-stage-and-access).
+The instructions below describe the earlier manual HTTPS gateway deployment;
+its credentials and temporary environment patches are not the automatic path.
+
 `observability/kubernetes/` contains the same pinned single-process backends and dashboard for the disposable GKE lab. It requests 400m CPU and 1,056 MiB memory across five pods (Grafana, Loki, Tempo, Mimir, Alloy); limits are 1,300m CPU and 1,664 MiB memory. The 1,280 MiB request quota and 1,792 MiB limit quota leave 224 MiB and 128 MiB of headroom respectively. These are scheduling budgets, not measured capacity. Each backend has one replica, filesystem data lives in capped `emptyDir` volumes, and restarts or teardown discard telemetry history. It is intended for one low-volume synthetic workload, with no persistence or availability guarantee.
 
 The manual lab recorded a Grafana `OOMKilled` termination (exit 137) under the prior 256 MiB limit; a later sample was 199 MiB. The 512 MiB limit adds headroom while keeping the 192 MiB request unchanged. This runtime adjustment has not yet been remeasured under a workload. Login requests recorded nearby returned 401 for an invalid password; the available evidence does not establish that login caused the OOM.

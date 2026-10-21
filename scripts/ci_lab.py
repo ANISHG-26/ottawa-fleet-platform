@@ -352,10 +352,15 @@ def run_pipeline(environment: dict[str, str] | None = None, *, runner=subprocess
             project=project, zone=private_tfvars["zone"], cluster=f"fleet-lab-r{run_id}",
             kubeconfig=str(kubeconfig), expires_at=expires_at, secret_values=private_tfvars,
             template_path=source_root / "gitops" / "environments" / "lab" / "application.json",
-            runner=runner,
+            runner=runner, telemetry_enabled=True,
+        )
+        from scripts.ci_telemetry import deploy as deploy_telemetry
+        telemetry = deploy_telemetry(
+            project=project, zone=private_tfvars["zone"], cluster=f"fleet-lab-r{run_id}",
+            kubeconfig=str(kubeconfig), expires_at=expires_at, root=source_root, runner=runner,
         )
         return {"run_id": run_id, "session_hours": session_hours, "expires_at": expires_at, "task": f"fleet-r{run_id}",
-                "application": app_release}
+                "application": app_release, "telemetry": telemetry}
     except Exception:
         if task_registered:
             # Invoke the exact already-registered cleanup task now as a failure backstop.
@@ -392,6 +397,10 @@ def main() -> int:
                        f"- Trusted release workflow run: `{release['run_id']}`",
                        "- Immutable image digests:"]
             summary.extend(f"  - `{name}`: `{digest}`" for name, digest in sorted(release["digests"].items()))
+            summary += ["", "## Lab telemetry", "",
+                        "- Five monitoring deployments ready; metrics, logs and traces queried successfully through Grafana.",
+                        "- Private UI: `kubectl -n observability port-forward service/grafana 13000:3000 --address=127.0.0.1`",
+                        "- Open `http://127.0.0.1:13000/grafana/`; retrieve the per-lab admin login from `observability/grafana-admin`."]
             summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
             if summary_path:
                 with open(summary_path, "a", encoding="utf-8") as target:

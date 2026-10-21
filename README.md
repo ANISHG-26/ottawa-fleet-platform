@@ -61,6 +61,7 @@ This choice creates a new session; it does not extend an existing run.
 | Lifecycle evidence | The October 9 lab's scheduled cleanup completed. October 20's deadline remained fixed; its later cleanup was not yet observed in this snapshot. |
 | Next experiments | Measure worker/backlog recovery ([#7](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/7)), demonstrate drift correction and schema-compatible rollback ([#14](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/14)). |
 | Available separately | LGTM telemetry configuration and runbooks; a dedicated LGTM stack was not installed in the October 20 lab. Logs and basic metrics remain available. |
+| Implemented, awaiting activation | Automatic LGTM installation and three-signal readiness for fresh labs ([#50](https://github.com/ANISHG-26/ottawa-fleet-platform/issues/50)); requires the app's trusted v0.2.2 or newer release, platform merge, and fresh-run acceptance. [Activation and UI access](docs/runbooks/on-demand-ci.md#automatic-lgtm-stage-and-access). |
 | Later | KEDA backlog scaling, Istio traffic experiments, Backstage, read-only AI investigation, then separately reviewed remediation. |
 
 Green/blue is currently a visual app marker, not blue-green traffic routing.
